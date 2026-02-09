@@ -111,6 +111,9 @@ class TradingAssistant {
                         doubaoModel: AI_CONFIG.DOUBAO_MODEL,
                         geminiModel: "gemini-3-pro-preview"
                     };
+                
+                // 5) Init Executor
+                this.executor = new TradeExecutor(this);
 
                 // Persist migrated data into chrome storage
                 if (migrated) {
@@ -291,6 +294,16 @@ class TradingAssistant {
                         <span>豆包模型:</span>
                         <input type="text" id="set-doubao-model" class="model-input" placeholder="如 doubao-lite-1-5 或 ep-xxxxx" autocomplete="off">
                     </div>
+                    <div style="margin:15px 0; border-top:1px dashed #444; padding-top:10px;">
+                        <div class="setting-item">
+                            <span style="color:#ff5252; font-weight:bold;">⚠️ 自动交易 (实验性):</span>
+                            <input type="checkbox" id="set-autotrade" style="width:20px;">
+                        </div>
+                        <div style="font-size:9px; color:#aaa; line-height:1.2;">
+                            开启后，AI 给出明确买卖建议(Buy/Sell)且置信度高时，将尝试模拟点击下单页面。<br/>
+                            <b>风险自负！建议仅用于模拟盘测试。</b>
+                        </div>
+                    </div>
                     <div class="settings-hint">密钥只会存储在本机 chrome.storage，不会上传。</div>
                     </div>
                     <div class="settings-actions">
@@ -335,6 +348,7 @@ class TradingAssistant {
         document.getElementById("set-chatgpt-key").value = this.apiKeys.chatgptKey || "";
         document.getElementById("set-grok-key").value = this.apiKeys.grokKey || "";
         document.getElementById("set-doubao-model").value = this.modelConfig.doubaoModel || AI_CONFIG.DOUBAO_MODEL;
+        document.getElementById("set-autotrade").checked = !!this.settings.autoTradeEnabled;
 
         // Event Listeners
         document.getElementById("ibkr-close").onclick = () => this.panel.remove();
@@ -938,6 +952,9 @@ class TradingAssistant {
                 请输出 JSON 格式（不要Markdown）：
                 {
                     "sentiment": 1-10的整数(1=极度恐慌, 10=极度贪婪),
+                    "action": "BUY" | "SELL" | "HOLD",
+                    "confidence": 0.0-1.0 (置信度),
+                    "quantity_pct": 0-100 (建议仓位比例),
                     "support": 关键支撑位数字(无则0),
                     "resistance": 关键阻力位数字(无则0),
                     "analysis": "100字以内的犀利操作建议，包含止损提示。"
@@ -1166,17 +1183,29 @@ class TradingAssistant {
             let supSum = 0, resSum = 0;
             let supCount = 0, resCount = 0;
 
+            // Action Aggregation
+            const voteMap = { "BUY": 0, "SELL": 0, "HOLD": 0 };
+            let highConfAction = null;
+
             validResults.forEach(r => {
                  const json = this.tryParse(r.data);
                  if (json) {
                     totalSent += (json.sentiment || 5);
                     if (json.support) { supSum += parseFloat(json.support); supCount++; }
                     if (json.resistance) { resSum += parseFloat(json.resistance); resCount++; }
+                    
+                    // Vote logic
+                    const act = (json.action || "HOLD").toUpperCase();
+                    if (voteMap[act] !== undefined) voteMap[act]++;
+                    else voteMap["HOLD"]++; // Default fallback
+
                     count++;
                     
                     commentaryHTML += `
                         <div style="margin-bottom:8px; border-left:2px solid ${r.color}; padding-left:6px;">
-                            <strong style="color:${r.color}; font-size:11px;">[${r.name}]</strong> <span style="font-size:12px;">${json.analysis}</span>
+                            <strong style="color:${r.color}; font-size:11px;">[${r.name}]</strong>
+                            <span style="font-size:10px; font-weight:bold; color:${act==='BUY'?'#4caf50':(act==='SELL'?'#f44336':'#aaa')}">[${act}]</span>
+                            <span style="font-size:12px;">${json.analysis}</span>
                         </div>
                     `;
                  }
@@ -1204,6 +1233,14 @@ class TradingAssistant {
             const avgSup = supCount > 0 ? (supSum / supCount).toFixed(2) : "N/A";
             const avgRes = resCount > 0 ? (resSum / resCount).toFixed(2) : "N/A";
 
+            // Determine Winner Action
+            let winner = "HOLD";
+            let maxVotes = -1;
+            for(let k in voteMap) {
+                if(voteMap[k] > maxVotes) { maxVotes = voteMap[k]; winner = k; }
+            }
+            if (winner !== "HOLD" && maxVotes < count / 2) winner = "HOLD"; // Weak consensus -> Hold
+
             // Update UI
             document.getElementById("sentiment-val").innerText = avgSent;
             const trackW = document.querySelector(".sentiment-track").offsetWidth;
@@ -1218,10 +1255,21 @@ class TradingAssistant {
             document.getElementById("lvl-sup").innerText = avgSup;
             document.getElementById("lvl-res").innerText = avgRes;
 
-            analysisEl.innerHTML = `<strong>综合评级 ${avgSent}/10</strong><br/>`; // Inline summary
+            const actionColor = winner==='BUY'?'#4caf50':(winner==='SELL'?'#f44336':'#aaa');
+            analysisEl.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong>综合评级 ${avgSent}/10</strong>
+                    <strong style="color:${actionColor}; border:1px solid ${actionColor}; padding:0 4px; border-radius:3px;">${winner}</strong>
+                </div>
+            `;
             
             // Show detailed popup
             this.updateAiPopup(commentaryHTML, `${ctx.symbol} AI Analysis`, false);
+
+            // AUTO-TRADE TRIGGER (Experimental)
+            if (this.settings.autoTradeEnabled) {
+                this.executor.evaluateSignal(winner, avgSent, ctx); 
+            }
 
         } catch (e) {
             console.error("Analysis Pipeline Error", e);
@@ -1655,6 +1703,7 @@ class TradingAssistant {
                     changeP = ((price - prev) / prev) * 100;
                 }
                 
+                               
                 const sign = changeP >= 0 ? "+" : "";
                 const colorClass = changeP >= 0 ? "value-up" : "value-down";
                 const changeStr = sign + changeP.toFixed(2) + "%";
@@ -1732,6 +1781,10 @@ class TradingAssistant {
             chatgptKey: document.getElementById("set-chatgpt-key").value.trim(),
             grokKey: document.getElementById("set-grok-key").value.trim()
         };
+        
+        // Auto-Trade Settings
+        this.settings.autoTradeEnabled = document.getElementById("set-autotrade").checked;
+
         // Save Models
         const dbModel = document.getElementById("set-doubao-model").value.trim();
         const gemModel = document.getElementById("set-gemini-model").value.trim();
@@ -1746,6 +1799,76 @@ class TradingAssistant {
             this.toggleModal("settings-modal");
             this.showToast("✅ 设置与密钥已本地保存", "success");
         });
+    }
+}
+
+class TradeExecutor {
+    constructor(app) {
+        this.app = app;
+    }
+
+    evaluateSignal(action, sentiment, ctx) {
+        if (action === "HOLD") return;
+
+        // Safety Gates
+        if (action === "BUY" && sentiment < 7) {
+            console.log("[AutoTrade] Skipped BUY due to low sentiment:", sentiment);
+            return;
+        }
+        if (action === "SELL" && sentiment > 4) {
+             console.log("[AutoTrade] Skipped SELL due to high sentiment:", sentiment);
+             return;
+        }
+
+        this.app.showToast(`🤖 AutoTrade Triggered: ${action} ${ctx.symbol}`, "warn");
+        
+        // Execution
+        this.attemptExecution(action, ctx.symbol);
+    }
+
+    async attemptExecution(action, symbol) {
+        console.log(`[AutoTrade] Executing ${action} on ${symbol}...`);
+        
+        // 1. Identify Order Ticket Elements
+        // NOTE: These selectors are HYPOTHETICAL. 
+        // User needs to inspect IBKR page and update these IDs/Classes.
+        const selectors = {
+            buyBtn: "button[data-action='buy'], .order-button-buy", 
+            sellBtn: "button[data-action='sell'], .order-button-sell",
+            quantityInput: "input.order-quantity",
+            priceInput: "input.order-price",
+            submitBtn: "button.submit-order"
+        };
+        
+        // 2. Try to find Buy/Sell button and Click
+        const btnSelector = action === "BUY" ? selectors.buyBtn : selectors.sellBtn;
+        const btn = document.querySelector(btnSelector);
+        
+        if (btn) {
+            btn.click();
+            this.app.showToast("✅ AutoTrade: Clicked Order Button", "success");
+            
+            // Wait for ticket to open
+            await new Promise(r => setTimeout(r, 1000));
+            
+            // 3. Fill Quantity (Example: 100 shares default)
+            const qtyInput = document.querySelector(selectors.quantityInput);
+            if (qtyInput) {
+                qtyInput.value = "100";
+                qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+                qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            
+            // 4. NOTE: We do NOT click Submit automatically for safety.
+            // asking user to confirm.
+            this.app.showToast("⚠️ 订单已预填，请人工确认提交！", "warn");
+            
+        } else {
+            // Fallback: If no button found, just alert
+            const msg = `[模拟交易] 应执行 ${action}，但未找到下单按钮 (需适配 DOM)`;
+            console.warn(msg);
+            this.app.updateAiPopup(`<div style="color:orange">${msg}</div>`, "AutoTrade Algo", false);
+        }
     }
 }
 
