@@ -1036,6 +1036,8 @@ class TradingAssistant {
                     const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/";
                     const url = `${baseUrl}${modelID}:generateContent?key=${gemKey}`;
                     
+                    console.log("[IBKR AI] Calling Gemini:", url.replace(gemKey, "***")); // Debug log
+
                     const response = await runViaBackground(url, null, {
                         contents: [{ parts: [{ text: "You are a Hedge Fund Manager. Return ONLY valid JSON. " + prompt }] }]
                     }, 10000);
@@ -1525,7 +1527,7 @@ class TradingAssistant {
 
         // Gemini / General
         if (lower.includes("403")) return "403 禁止：检查 API Key 或切换 VPN 节点";
-        if (lower.includes("404")) return `404: 模型不存在/不可用 (${msg.substring(0, 30)}...)`;
+        if (lower.includes("404")) return `404: 模型/路径错误 | ${msg}`; // Show full msg
         if (lower.includes("429")) return "429 限流：调用太频繁或模型配额已满 (建议换 gemini-1.5-flash)";
         if (lower.includes("blocked")) return "提示被安全策略拦截：放宽措辞或缩短提示";
         if (lower.includes("timeout") || lower.includes("abort")) return "请求超时：网络/VPN 不稳定";
