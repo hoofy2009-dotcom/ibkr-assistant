@@ -6,7 +6,8 @@ const AI_CONFIG = {
 
     // Gemini (replace with your own restricted API key; do NOT commit real keys)
     GEMINI_KEY: "__REPLACE_WITH_YOUR_KEY__",
-    GEMINI_URL: "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", // Standard stable model
+    // GEMINI_URL: "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent", // Legacy
+    GEMINI_URL: "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent", // Faster & Standard
 
     // Other provider endpoints (keys仅本地存储)
     OPENAI_URL: "https://api.openai.com/v1/chat/completions",
