@@ -1701,18 +1701,35 @@ class TradingAssistant {
         });
     }
 
-    async getPortfolioSummary() {
+    // Scrape visible rows to give LLM context on user's potential holdings (Heuristic)
+    getPortfolioSummary() {
         try {
+            // SlickGrid often splits rows into locked (left) and scrollable (right) panes.
+            // Rows are positioned absolutely with 'top: Xpx'. We need to merge them by 'top'.
             const rows = Array.from(document.querySelectorAll(".slick-row"));
             if (!rows.length) return "Portfolio not visible (List Empty)";
-            // Simple text extraction from top 15 rows
-            const summary = rows.map(r => {
-                // Try to identify Symbol and Position columns if possible, but raw text is fallback
-                return r.innerText.replace(/[\r\n]+/g, " ").trim();
+
+            const map = new Map();
+            
+            rows.forEach(r => {
+                const top = r.style.top || "0px";
+                if (!map.has(top)) map.set(top, []);
+                map.get(top).push(r.innerText.replace(/[\r\n]+/g, " ").trim());
+            });
+
+            // Sort by pixel position (parse "123px")
+            const sortedKeys = Array.from(map.keys()).sort((a,b) => {
+                return parseInt(a) - parseInt(b);
+            });
+
+            const summary = sortedKeys.map(k => {
+                // Join parts (e.g. Symbol part + Data part)
+                return map.get(k).join(" | "); 
             })
             .filter(t => t.length > 3 && /[0-9]/.test(t)) // Filter out empty headers
-            .slice(0, 15)
-            .join("; ");
+            .slice(0, 20) // Limit to top 20 rows
+            .join("\n");
+
             return summary || "None detected";
         } catch (e) {
             return "Error scanning portfolio";
