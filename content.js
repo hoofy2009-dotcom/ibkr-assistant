@@ -1476,59 +1476,81 @@ class TradingAssistant {
         });
     }
 
-    async fetchMacroData() {
+    async fetchTickerData(symbol) {
         try {
-            // Using Background Proxy to fetch Yahoo
-            const rawText = await this.proxyFetch("https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&range=5d");
+            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=2d`);
             const data = JSON.parse(rawText);
+            const result = data.chart?.result?.[0];
+            if (!result) return null;
             
-            if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
-                 throw new Error("Invalid or Empty API Response");
-            }
-
-            const result = data.chart.result[0];
             const meta = result.meta;
+            let price = meta.regularMarketPrice;
+            const prevClose = meta.chartPreviousClose || meta.previousClose;
             
-            // Robust Price Resolving
-            let currentPrice = meta.regularMarketPrice;
-            let prevClose = meta.chartPreviousClose || meta.previousClose;
-
-            // Fallback 1: Use last quote if regularMarketPrice is missing
-            if (currentPrice === undefined || currentPrice === null) {
-                const quotes = result.indicators.quote[0];
-                if (quotes && quotes.close) {
-                    const valid = quotes.close.filter(c => c != null);
-                    if (valid.length > 0) currentPrice = valid[valid.length - 1];
-                }
+            if (price == null) {
+                const quotes = result.indicators.quote[0].close;
+                const valid = quotes.filter(c => c != null);
+                if (valid.length) price = valid[valid.length - 1];
             }
             
-            // Fallback 2: Fail gracefully
-            if (currentPrice == null || prevClose == null || prevClose === 0) {
-                this.macroCache = { price: 0, change: "0.00% (NoData)" };
-            } else {
-                const changeP = ((currentPrice - prevClose) / prevClose) * 100;
-                const sign = changeP >= 0 ? "+" : "";
-                this.macroCache = { 
-                    price: currentPrice, 
-                    change: isNaN(changeP) ? "Error" : (sign + changeP.toFixed(2) + "%") 
+            if (price != null && prevClose) {
+                const changePct = ((price - prevClose) / prevClose) * 100;
+                return { 
+                    symbol, 
+                    price, 
+                    changePct, 
+                    fmt: `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%` 
                 };
             }
+            return null;
+        } catch (e) {
+            console.warn(`Failed to fetch ${symbol}`, e);
+            return null;
+        }
+    }
+
+    async fetchMacroData() {
+        if (this.macroCache && (Date.now() - this.macroCache.ts < 300000)) return; 
+        
+        try {
+            const [spy, vix, xlk, xlf, iwm, tnx] = await Promise.all([
+                this.fetchTickerData("SPY"),
+                this.fetchTickerData("^VIX"), 
+                this.fetchTickerData("XLK"),  
+                this.fetchTickerData("XLF"),
+                this.fetchTickerData("IWM"),
+                this.fetchTickerData("^TNX")
+            ]);
+
+            let regime = "Normal";
+            let vixVal = vix ? vix.price : 0;
+            if (vixVal < 15) regime = "Low Vol (Complacency)";
+            else if (vixVal > 30) regime = "Extreme Fear (Crash)";
+            else if (vixVal > 20) regime = "High Vol (Risk-Off)";
+            
+            const summary = `SPY:${spy?spy.fmt:"--"} | VIX:${vixVal.toFixed(1)}(${regime}) | 10Y:${tnx?tnx.price.toFixed(2)+"%":"--"} | XLK:${xlk?xlk.fmt:"--"} XLF:${xlf?xlf.fmt:"--"}`;
+
+            this.macroCache = { 
+                summary,
+                vix: vixVal,
+                regime,
+                ts: Date.now() 
+            };
             
             const ribbon = document.getElementById("macro-ribbon");
             if (ribbon) {
-                // Determine sentiment based on calculated change
-                const numericChange = parseFloat(this.macroCache.change.replace('%', ''));
-                const isBullish = !isNaN(numericChange) && numericChange > 0.5;
-                const isBearish = !isNaN(numericChange) && numericChange < -0.5;
+                let color = '#4caf50'; 
+                if (vixVal > 20) color = '#ff9800'; 
+                if (vixVal > 30) color = '#ff5252'; 
                 
                 ribbon.innerHTML = `
-                    <span style="color:${isBearish ? '#ff5252' : '#4caf50'}">SPY (S&P500): ${this.macroCache.change}</span>
-                    <span>SENTIMENT: ${isBullish ? 'BULLISH' : (isBearish ? 'BEARISH' : 'NEUTRAL')}</span>
+                    <span style="font-weight:bold;color:${color}">VIX: ${vixVal.toFixed(2)} (${regime})</span>
+                    <span style="margin-left:10px;font-size:0.9em;color:#aaa">SPY ${spy?spy.fmt:"--"} | XLK ${xlk?xlk.fmt:"--"}</span>
                 `;
             }
         } catch(e) {
             console.log("Macro Fetch Err", e);
-            const ribbon = document.getElementById("macro-ribbon");
+             const ribbon = document.getElementById("macro-ribbon");
             if(ribbon) ribbon.innerHTML = `<span style='color:orange'>Macro: Data Err (${e.message})</span>`;
         }
     }
