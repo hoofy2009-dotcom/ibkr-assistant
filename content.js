@@ -1170,11 +1170,20 @@ class TradingAssistant {
         const panel = document.getElementById("ibkr-pnl-panel");
         if (popup && panel) {
             const rect = panel.getBoundingClientRect();
-            // Position to the left of the panel
+            const popupWidth = 300; // css defined width
+            const gap = 10;
+            
+            // Attempt to place on the left side first
+            let leftPos = rect.left - popupWidth - gap;
+            
+            // Intelligent positioning: if left side is clipped off-screen (left < 0),
+            // move it to the right side of the main panel instead.
+            if (leftPos < 10) {
+                leftPos = rect.right + gap;
+            }
+
             popup.style.top = rect.top + "px";
-            popup.style.left = (rect.left - 310) + "px"; // 300 width + 10 gap
-            // If sticking out to the left, try right? No, standard is left for these tools usually. 
-            // Or ensure it's fixed.
+            popup.style.left = leftPos + "px";
         }
     }
 
