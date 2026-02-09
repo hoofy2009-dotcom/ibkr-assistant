@@ -1046,56 +1046,83 @@ class TradingAssistant {
                     userModelID = userModelID.replace(/^models\//, "").trim();
                     if(!userModelID) userModelID = "gemini-1.5-flash"; 
 
-                    const runGemini = async (mid) => {
-                         const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/";
-                         const url = `${baseUrl}${mid}:generateContent?key=${gemKey}`;
-                         console.log("[IBKR AI] Calling Gemini:", mid);
-                         return await runViaBackground(url, null, {
-                            contents: [{ parts: [{ text: "You are a Hedge Fund Manager. Return ONLY valid JSON. " + prompt }] }]
-                         }, 15000); // Increased timeout
-                    };
+                    // Known valid models to try in order of preference if user's choice fails
+                    // gemini-pro is legacy and often returns 404 now. 
+                    // gemini-1.5-flash is current standard.
+                    // gemini-2.0-flash-exp is the new fast one.
+                    const candidates = [
+                        userModelID,
+                        "gemini-1.5-flash",
+                        "gemini-1.5-pro",
+                        "gemini-1.0-pro",
+                        "gemini-2.0-flash-exp"
+                    ];
+                    
+                    // Deduplicate
+                    const uniqueCandidates = [...new Set(candidates)];
+                    let lastError = null;
 
-                    let response;
-                    let usedModel = userModelID;
+                    for (const mid of uniqueCandidates) {
+                        if (!mid) continue;
+                        try {
+                            console.log(`[IBKR AI] Gemini Intent: Trying model [${mid}]...`);
+                            const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/";
+                            const url = `${baseUrl}${mid}:generateContent?key=${gemKey}`;
+                            
+                            const response = await runViaBackground(url, null, {
+                                contents: [{ parts: [{ text: "You are a Hedge Fund Manager. Return ONLY valid JSON. " + prompt }] }]
+                            }, 15000);
 
-                    try {
-                        response = await runGemini(userModelID);
-                    } catch (e) {
-                         const is404 = e.message.includes("404") || e.message.includes("NOT_FOUND");
-                         if (is404) {
-                             console.warn(`Gemini [${userModelID}] failed (404). Trying fallbacks...`);
-                             // Fallback chain: gemini-1.5-flash-latest -> gemini-pro
-                             const fallback = userModelID === "gemini-pro" ? null : "gemini-pro";
-                             
-                             if (fallback) {
-                                 try {
-                                     console.log(`Fallback to [${fallback}]`);
-                                     response = await runGemini(fallback);
-                                     usedModel = fallback;
-                                 } catch(e2) {
-                                     throw e2; // Fallback failed too
-                                 }
-                             } else {
-                                 throw e;
-                             }
-                         } else {
-                             throw e;
+                            // Validate response structure
+                            if (response && response.candidates && response.candidates.length) {
+                                let raw = response.candidates[0].content.parts[0].text;
+                                raw = raw.replace(/```json/g, "").replace(/```/g, "").trim();
+                                return JSON.parse(raw); // Success! Return immediately
+                            }
+                            
+                            // Check for block reasons to stop trying
+                            if (response && response.promptFeedback && response.promptFeedback.blockReason) {
+                                throw new Error("Blocked: " + response.promptFeedback.blockReason);
+                            }
+                            
+                            // Check for API errors
+                            if (response && response.error) {
+                                const msg = response.error.message || JSON.stringify(response.error);
+                                throw new Error(msg);
+                            }
+
+                            throw new Error("Empty/Invalid Response");
+
+                        } catch (e) {
+                            lastError = e;
+                            const msg = e.message.toLowerCase();
+                            // If it's a 404 (Model not found) or 400 (Bad request often due to model), continue to next candidate
+                            // If it's 403 (Auth), 429 (Quota), keep trying? No, 403/429 usually applies to all models.
+                            // But let's be safe and try next if it's 404 or just general failure.
+                            if (msg.includes("404") || msg.includes("not found") || msg.includes("not_found")) {
+                                console.warn(`Gemini [${mid}] 404. Trying next...`);
+                                continue;
+                            }
+                            
+                            // For other errors (like 429, 403), abort loop early to save time?
+                            // Actually, sometimes 400 is model specific (e.g. deprecated).
+                            // Let's just log and continue unless it's clearly auth.
+                            if (msg.includes("key") || msg.includes("auth") || msg.includes("403")) {
+                                throw e; // Stop trying if key is bad
+                            }
+                            console.warn(`Gemini [${mid}] error: ${e.message}`);
+                        }
+                    }
+
+                    // If we get here, all failed
+                    if (lastError && lastError.message) {
+                         const msg = lastError.message;
+                         if (msg.includes("404") || msg.includes("NOT_FOUND")) {
+                             throw new Error(`All models failed (404). Last tried: ${uniqueCandidates[uniqueCandidates.length-1]}`);
                          }
+                         throw lastError;
                     }
-
-                    if (!response || !response.candidates || !response.candidates.length) {
-                        if (response && response.promptFeedback && response.promptFeedback.blockReason) {
-                            throw new Error("Gemini Blocked: " + response.promptFeedback.blockReason);
-                        }
-                        if (response && response.error) { 
-                             const errMsg = response.error.message || JSON.stringify(response.error);
-                             throw new Error(`[${usedModel}] ${errMsg}`);
-                        }
-                        throw new Error(`Gemini Invalid Response (Model: ${usedModel})`);
-                    }
-                    let raw = response.candidates[0].content.parts[0].text;
-                    raw = raw.replace(/```json/g, "").replace(/```/g, "").trim();
-                    return JSON.parse(raw);
+                    throw new Error("Gemini Connection Failed");
                 });
             }
 
