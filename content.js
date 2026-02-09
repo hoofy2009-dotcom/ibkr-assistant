@@ -930,6 +930,7 @@ class TradingAssistant {
             // 1. Fetch News First
             const newsHeadlines = await this.fetchMarketNews(ctx.symbol);
             const newsText = newsHeadlines.length > 0 ? newsHeadlines.join("; ") : "暂无重磅新闻";
+            const portfolioText = this.getPortfolioSummary();
 
             // 2. Build Enhanced Prompt
             const prompt = `
@@ -939,6 +940,9 @@ class TradingAssistant {
                 【宏观】
                 SPY Context: ${this.macroCache ? this.macroCache.change : "Unknown"}
                 
+                【用户持仓情况(参考)】
+                ${portfolioText}
+
                 【标的】
                 Symbol: ${ctx.symbol}
                 Price: ${ctx.price} (Change: ${ctx.change.toFixed(2)})
@@ -1046,83 +1050,78 @@ class TradingAssistant {
                     userModelID = userModelID.replace(/^models\//, "").trim();
                     if(!userModelID) userModelID = "gemini-1.5-flash"; 
 
-                    // Known valid models to try in order of preference if user's choice fails
-                    // gemini-pro is legacy and often returns 404 now. 
-                    // gemini-1.5-flash is current standard.
-                    // gemini-2.0-flash-exp is the new fast one.
                     const candidates = [
-                        userModelID,
-                        "gemini-1.5-flash",
-                        "gemini-1.5-pro",
-                        "gemini-1.0-pro",
-                        "gemini-2.0-flash-exp"
+                        { id: userModelID, version: "v1beta" },
+                        { id: "gemini-1.5-flash", version: "v1beta" },
+                        { id: "gemini-1.5-pro", version: "v1beta" },
+                        { id: "gemini-2.0-flash-exp", version: "v1beta" },
+                        { id: "gemini-pro", version: "v1beta" },
+                        { id: "gemini-pro", version: "v1" }
                     ];
                     
-                    // Deduplicate
-                    const uniqueCandidates = [...new Set(candidates)];
+                    const unique = [];
+                    const seen = new Set();
+                    candidates.forEach(c => {
+                         const k = c.id + c.version;
+                         if(!seen.has(k)) { seen.add(k); unique.push(c); }
+                    });
+
                     let lastError = null;
 
-                    for (const mid of uniqueCandidates) {
-                        if (!mid) continue;
-                        try {
-                            console.log(`[IBKR AI] Gemini Intent: Trying model [${mid}]...`);
-                            const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/";
-                            const url = `${baseUrl}${mid}:generateContent?key=${gemKey}`;
-                            
-                            const response = await runViaBackground(url, null, {
+                    const execute = async (mid, ver) => {
+                         const baseUrl = `https://generativelanguage.googleapis.com/${ver}/models/`;
+                         const cleanId = mid.replace(/^models\//, "");
+                         const url = `${baseUrl}${cleanId}:generateContent?key=${gemKey}`;
+                         
+                         console.log(`[IBKR AI] Gemini Try: ${mid} (${ver})`);
+                         const response = await runViaBackground(url, null, {
                                 contents: [{ parts: [{ text: "You are a Hedge Fund Manager. Return ONLY valid JSON. " + prompt }] }]
-                            }, 15000);
+                         }, 15000);
 
-                            // Validate response structure
-                            if (response && response.candidates && response.candidates.length) {
+                         if (response && response.candidates && response.candidates.length) {
                                 let raw = response.candidates[0].content.parts[0].text;
                                 raw = raw.replace(/```json/g, "").replace(/```/g, "").trim();
-                                return JSON.parse(raw); // Success! Return immediately
-                            }
-                            
-                            // Check for block reasons to stop trying
-                            if (response && response.promptFeedback && response.promptFeedback.blockReason) {
-                                throw new Error("Blocked: " + response.promptFeedback.blockReason);
-                            }
-                            
-                            // Check for API errors
-                            if (response && response.error) {
-                                const msg = response.error.message || JSON.stringify(response.error);
-                                throw new Error(msg);
-                            }
+                                return JSON.parse(raw);
+                         }
+                         if (response && response.error) {
+                             throw new Error(response.error.message || JSON.stringify(response.error));
+                         }
+                         throw new Error("Invalid structure");
+                    };
 
-                            throw new Error("Empty/Invalid Response");
-
+                    for (const cand of unique) {
+                        try {
+                            return await execute(cand.id, cand.version);
                         } catch (e) {
                             lastError = e;
                             const msg = e.message.toLowerCase();
-                            // If it's a 404 (Model not found) or 400 (Bad request often due to model), continue to next candidate
-                            // If it's 403 (Auth), 429 (Quota), keep trying? No, 403/429 usually applies to all models.
-                            // But let's be safe and try next if it's 404 or just general failure.
-                            if (msg.includes("404") || msg.includes("not found") || msg.includes("not_found")) {
-                                console.warn(`Gemini [${mid}] 404. Trying next...`);
-                                continue;
-                            }
-                            
-                            // For other errors (like 429, 403), abort loop early to save time?
-                            // Actually, sometimes 400 is model specific (e.g. deprecated).
-                            // Let's just log and continue unless it's clearly auth.
-                            if (msg.includes("key") || msg.includes("auth") || msg.includes("403")) {
-                                throw e; // Stop trying if key is bad
-                            }
-                            console.warn(`Gemini [${mid}] error: ${e.message}`);
+                            if (msg.includes("404") || msg.includes("not found")) continue;
+                            if (msg.includes("key") || msg.includes("auth") || msg.includes("403")) throw e;
                         }
                     }
 
-                    // If we get here, all failed
-                    if (lastError && lastError.message) {
-                         const msg = lastError.message;
-                         if (msg.includes("404") || msg.includes("NOT_FOUND")) {
-                             throw new Error(`All models failed (404). Last tried: ${uniqueCandidates[uniqueCandidates.length-1]}`);
-                         }
-                         throw lastError;
+                    // Discovery Fallback using GET
+                    try {
+                        console.log("[IBKR AI] Gemini Fallback: Discovery Mode");
+                        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${gemKey}`;
+                        const listRaw = await this.proxyFetch(listUrl); 
+                        const listData = (typeof listRaw === 'string') ? JSON.parse(listRaw) : listRaw;
+                        
+                        if (listData && listData.models) {
+                            const valid = listData.models.find(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"));
+                            if (valid) {
+                                console.log(`[IBKR AI] Discovered: ${valid.name}`);
+                                return await execute(valid.name, "v1beta");
+                            }
+                        }
+                    } catch(e) {
+                        console.warn("Discovery failed", e);
                     }
-                    throw new Error("Gemini Connection Failed");
+
+                    if (lastError && lastError.message) {
+                        if (lastError.message.includes("404")) throw new Error("Gemini: All models 404 (Check API Key / VPN Region)");
+                    }
+                    throw lastError || new Error("Gemini Connection Failed");
                 });
             }
 
@@ -1700,6 +1699,24 @@ class TradingAssistant {
         container.querySelectorAll(".wl-del").forEach(btn => {
             btn.onclick = (e) => this.removeWatchlist(e.target.dataset.sym);
         });
+    }
+
+    async getPortfolioSummary() {
+        try {
+            const rows = Array.from(document.querySelectorAll(".slick-row"));
+            if (!rows.length) return "Portfolio not visible (List Empty)";
+            // Simple text extraction from top 15 rows
+            const summary = rows.map(r => {
+                // Try to identify Symbol and Position columns if possible, but raw text is fallback
+                return r.innerText.replace(/[\r\n]+/g, " ").trim();
+            })
+            .filter(t => t.length > 3 && /[0-9]/.test(t)) // Filter out empty headers
+            .slice(0, 15)
+            .join("; ");
+            return summary || "None detected";
+        } catch (e) {
+            return "Error scanning portfolio";
+        }
     }
 
     async updateWatchlistData() {
