@@ -279,7 +279,14 @@ class TradingAssistant {
                     </div>
                     <div class="setting-item">
                         <span>OpenRouter Model:</span>
-                        <input type="text" id="set-or-model" class="model-input" placeholder="anthropic/claude-3.5-sonnet" autocomplete="off">
+                        <select id="set-or-model" class="model-input" style="background:#333; color:#fff; border:1px solid #444; padding:4px;">
+                            <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (最强逻辑)</option>
+                            <option value="openai/gpt-4o">GPT-4o (综合能力)</option>
+                            <option value="google/gemini-pro-1.5">Gemini 1.5 Pro (百万上下文)</option>
+                            <option value="meta-llama/llama-3.1-70b-instruct">Llama 3.1 70B (高性价比)</option>
+                            <option value="deepseek/deepseek-chat">DeepSeek V3 (原生)</option>
+                            <option value="perplexity/llama-3.1-sonar-huge-128k-online">Perplexity Online (实时联网)</option>
+                        </select>
                     </div>
                     <div style="border-top: 1px solid #444; margin: 10px 0;"></div>
 
@@ -948,18 +955,22 @@ class TradingAssistant {
             const newsText = newsHeadlines.length > 0 ? newsHeadlines.join("; ") : "暂无重磅新闻";
             const portfolioText = this.getPortfolioSummary();
 
-            // 2. Build Enhanced Prompt
+            // 2. Build Enhanced Prompt (Aggressive Context Injection)
             const prompt = `
                 身份：华尔街资深对冲基金经理 (Macro-driven Technical Trader)。
-                任务：结合技术面、宏观背景与新闻，给出操作指令。
+                任务：这不仅是分析，而是针对我（用户）账户的实战操作建议。
                 
-                【宏观】
-                SPY Context: ${this.macroCache ? this.macroCache.change : "Unknown"}
+                【核心原则】
+                1. **必须检查用户持仓**：如果你在下方【用户持仓参考】中能找到当前标的 (${ctx.symbol})，务必根据具体盈亏给出建议（例："持有xx股浮亏，建议反弹减仓"）。不要假装我没持仓！
+                2. **宏观风控**：若 VIX > 25，禁止推荐激进买入。
                 
-                【用户持仓情况(参考)】
+                【宏观环境】
+                ${this.macroCache ? this.macroCache.summary : "Pending"}
+                
+                【用户持仓参考 (务必阅读)】
                 ${portfolioText}
 
-                【标的】
+                【标的实时数据】
                 Symbol: ${ctx.symbol}
                 Price: ${ctx.price} (Change: ${ctx.change.toFixed(2)})
                 Volatility: ${ctx.volatility}
