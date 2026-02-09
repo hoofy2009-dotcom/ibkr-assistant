@@ -1025,8 +1025,10 @@ class TradingAssistant {
             // Only manual triggers will fan out to other models to节省调用
             if (!autoTriggerReason && gemKey) {
                 addTask("gemini", "Gemini", "#ba68c8", async () => {
-                    const modelID = (this.modelConfig && this.modelConfig.geminiModel) ? this.modelConfig.geminiModel : "gemini-3-pro-preview";
-                    
+                    let modelID = (this.modelConfig && this.modelConfig.geminiModel) ? this.modelConfig.geminiModel : "gemini-1.5-flash";
+                    modelID = modelID.trim();
+                    if(!modelID) modelID = "gemini-1.5-flash"; 
+
                     // Construct URL dynamically based on model name
                     // Standard pattern: .../models/{modelID}:generateContent
                     const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/";
@@ -1040,7 +1042,11 @@ class TradingAssistant {
                         if (response && response.promptFeedback && response.promptFeedback.blockReason) {
                             throw new Error("Gemini Blocked: " + response.promptFeedback.blockReason);
                         }
-                        throw new Error("Gemini Invalid Response");
+                        // Include modelID in error for debugging
+                        if (response && response.error) { // 400/404 often return json body with error
+                             throw new Error(JSON.stringify(response.error));
+                        }
+                        throw new Error(`Gemini Invalid Response (Model: ${modelID})`);
                     }
                     let raw = response.candidates[0].content.parts[0].text;
                     raw = raw.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -1721,8 +1727,8 @@ class TradingAssistant {
             grokKey: document.getElementById("set-grok-key").value.trim()
         };
         // Save Models
-        const dbModel = document.getElementById("set-doubao-model").value;
-        const gemModel = document.getElementById("set-gemini-model").value;
+        const dbModel = document.getElementById("set-doubao-model").value.trim();
+        const gemModel = document.getElementById("set-gemini-model").value.trim();
         this.modelConfig.doubaoModel = dbModel;
         this.modelConfig.geminiModel = gemModel;
 
