@@ -270,6 +270,19 @@ class TradingAssistant {
                         <span>Gemini 模型:</span>
                         <input type="text" id="set-gemini-model" class="model-input" placeholder="默认: gemini-3-pro-preview" autocomplete="off">
                     </div>
+                    
+                    <div style="border-top: 1px solid #444; margin: 10px 0;"></div>
+                    <div style="color: #64b5f6; font-size: 11px; margin-bottom: 5px;">OpenRouter (推荐: Claude/GPT聚合)</div>
+                    <div class="setting-item">
+                        <span>OpenRouter Key:</span>
+                        <input type="password" id="set-or-key" placeholder="sk-or-..." autocomplete="off">
+                    </div>
+                    <div class="setting-item">
+                        <span>OpenRouter Model:</span>
+                        <input type="text" id="set-or-model" class="model-input" placeholder="anthropic/claude-3.5-sonnet" autocomplete="off">
+                    </div>
+                    <div style="border-top: 1px solid #444; margin: 10px 0;"></div>
+
                     <div class="setting-item">
                         <span>通义千问 Key:</span>
                         <input type="password" id="set-tongyi-key" placeholder="仅本地保存" autocomplete="off">
@@ -342,6 +355,8 @@ class TradingAssistant {
         document.getElementById("set-ds-key").value = this.apiKeys.deepseekKey || "";
         document.getElementById("set-gem-key").value = this.apiKeys.geminiKey || "";
         document.getElementById("set-gemini-model").value = this.modelConfig.geminiModel || "gemini-3-pro-preview";
+        document.getElementById("set-or-key").value = this.apiKeys.openrouterKey || "";
+        document.getElementById("set-or-model").value = this.modelConfig.openrouterModel || "anthropic/claude-3.5-sonnet";
         document.getElementById("set-tongyi-key").value = this.apiKeys.tongyiKey || "";
         document.getElementById("set-doubao-key").value = this.apiKeys.doubaoKey || "";
         document.getElementById("set-claude-key").value = this.apiKeys.claudeKey || "";
@@ -903,8 +918,9 @@ class TradingAssistant {
         const claudeKey = this.keyFilled(this.apiKeys?.claudeKey) ? this.apiKeys.claudeKey : "";
         const chatgptKey = this.keyFilled(this.apiKeys?.chatgptKey) ? this.apiKeys.chatgptKey : "";
         const grokKey = this.keyFilled(this.apiKeys?.grokKey) ? this.apiKeys.grokKey : "";
-        if (!dsKey) {
-            analysisEl.innerText = "请先在设置中填写 DeepSeek Key（仅本地存储）";
+        const orKey = this.keyFilled(this.apiKeys?.openrouterKey) ? this.apiKeys.openrouterKey : "";
+        if (!dsKey && !orKey) { // Relax check if OR key is present
+            analysisEl.innerText = "请先在设置中填写 DeepSeek Key 或 OpenRouter Key";
             return;
         }
 
@@ -985,37 +1001,69 @@ class TradingAssistant {
                 })());
             };
 
-            // DeepSeek (always runs; fallback even在自动模式)
-            addTask("deepseek", "DeepSeek", "#4fc3f7", async () => {
-                const dsRes = await this.fetchWithTimeout(async (signal) => {
-                    const response = await fetch(AI_CONFIG.API_URL, {
-                        method: "POST",
-                        signal,
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": `Bearer ${dsKey}`
-                        },
-                        body: JSON.stringify({
-                            model: "deepseek-chat",
-                            messages: [
-                                {"role": "system", "content": "You are a Hedge Fund Manager. Return ONLY valid JSON."},
-                                {"role": "user", "content": prompt}
-                            ],
-                            temperature: 0.4,
-                            max_tokens: 350
-                        })
+            // DeepSeek
+            if (dsKey) {
+                addTask("deepseek", "DeepSeek", "#4fc3f7", async () => {
+                    const dsRes = await this.fetchWithTimeout(async (signal) => {
+                        const response = await fetch(AI_CONFIG.API_URL, {
+                            method: "POST",
+                            signal,
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer ${dsKey}`
+                            },
+                            body: JSON.stringify({
+                                model: "deepseek-chat",
+                                messages: [
+                                    {"role": "system", "content": "You are a Hedge Fund Manager. Return ONLY valid JSON."},
+                                    {"role": "user", "content": prompt}
+                                ],
+                                temperature: 0.4,
+                                max_tokens: 350
+                            })
+                        });
+                        if (!response.ok) throw new Error(`DS HTTP ${response.status}`);
+                        const data = await response.json();
+                        if (!data.choices || !data.choices.length || !data.choices[0].message || !data.choices[0].message.content) {
+                            throw new Error("DS Empty Response");
+                        }
+                        let raw = data.choices[0].message.content;
+                        raw = raw.replace(/```json/g, "").replace(/```/g, "").trim();
+                        return JSON.parse(raw);
+                    }, 10000, 1);
+                    return dsRes;
+                });
+            }
+
+            // OpenRouter (The Universal Key solution)
+            if (orKey) {
+                const userModel = (this.modelConfig && this.modelConfig.openrouterModel) || "anthropic/claude-3.5-sonnet";
+                
+                addTask("openrouter", "OpenRouter", "#AB47BC", async () => {
+                    const url = "https://openrouter.ai/api/v1/chat/completions";
+                    const headers = { 
+                        "Content-Type": "application/json", 
+                        "Authorization": `Bearer ${orKey}`,
+                        "HTTP-Referer": "https://ibkr.com", // Required by OpenRouter for ranking
+                        "X-Title": "IBKR Copilot"
+                    };
+                    
+                    const resp = await runViaBackground(url, headers, {
+                        model: userModel,
+                        messages: [
+                            { role: "system", content: "You are a Hedge Fund Manager. Return ONLY valid JSON." },
+                            { role: "user", content: prompt }
+                        ],
+                        temperature: 0.4,
+                        max_tokens: 500
                     });
-                    if (!response.ok) throw new Error(`DS HTTP ${response.status}`);
-                    const data = await response.json();
-                    if (!data.choices || !data.choices.length || !data.choices[0].message || !data.choices[0].message.content) {
-                        throw new Error("DS Empty Response");
-                    }
-                    let raw = data.choices[0].message.content;
+
+                    if (!resp.choices || !resp.choices.length) throw new Error("OpenRouter Empty Response");
+                    let raw = resp.choices[0].message.content;
                     raw = raw.replace(/```json/g, "").replace(/```/g, "").trim();
                     return JSON.parse(raw);
-                }, 10000, 1);
-                return dsRes;
-            });
+                });
+            }
 
             // Helpers for OpenAI-compatible endpoints
             const buildOAIBody = (model) => ({
@@ -1880,6 +1928,7 @@ class TradingAssistant {
         this.apiKeys = {
             deepseekKey: document.getElementById("set-ds-key").value.trim(),
             geminiKey: document.getElementById("set-gem-key").value.trim(),
+            openrouterKey: document.getElementById("set-or-key").value.trim(),
             tongyiKey: document.getElementById("set-tongyi-key").value.trim(),
             doubaoKey: document.getElementById("set-doubao-key").value.trim(),
             claudeKey: document.getElementById("set-claude-key").value.trim(),
@@ -1895,6 +1944,8 @@ class TradingAssistant {
         const gemModel = document.getElementById("set-gemini-model").value.trim();
         this.modelConfig.doubaoModel = dbModel;
         this.modelConfig.geminiModel = gemModel;
+        const orModel = document.getElementById("set-or-model").value.trim();
+        this.modelConfig.openrouterModel = orModel;
 
         chrome.storage.local.set({
             assist_settings: this.settings,
