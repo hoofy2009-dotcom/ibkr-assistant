@@ -1126,10 +1126,24 @@ class TradingAssistant {
             btn.innerText = "重新分析";
 
             // Parse Results
-            const validResults = results.filter(r => r.data && !r.data.__isError && this.tryParse(r.data));
+            const validResults = [];
+            const errorResults = [];
+            
+            results.forEach(r => {
+                if (r.data && !r.data.__isError && this.tryParse(r.data)) {
+                    validResults.push(r);
+                } else {
+                    errorResults.push(r);
+                }
+            });
             
             if (validResults.length === 0) {
-                analysisEl.innerText = "所有模型调用失败，请检查 API Key 或网络连通性。";
+                let errHtml = `<div style="color:#ff5252;">All models failed:</div>`;
+                errorResults.forEach(r => {
+                    const msg = r.data && r.data.msg ? r.data.msg : "Unknown Error";
+                     errHtml += `<div style="font-size:11px; margin-top:4px;"><b>${r.name}:</b> ${msg}</div>`;
+                });
+                this.updateAiPopup(errHtml, `${ctx.symbol} Analysis Failed`, false);
                 return;
             }
 
@@ -1155,6 +1169,24 @@ class TradingAssistant {
                     `;
                  }
             });
+
+             // Append Errors at bottom if any
+            if (errorResults.length > 0) {
+                commentaryHTML += `<div style="margin-top:12px; border-top:1px solid #333; padding-top:8px;">
+                    <div style="font-size:11px; color:#aaa; margin-bottom:4px;">Failed Models:</div>`;
+                
+                errorResults.forEach(r => {
+                    let msg = r.data && r.data.msg ? r.data.msg : "Invalid Response / Parsing Error";
+                    try { msg = this.formatGeminiError(msg); } catch(e) {}
+                    
+                    commentaryHTML += `
+                        <div style="font-size:10px; color:#ef5350; margin-bottom:2px;">
+                            • <b>${r.name}:</b> ${msg}
+                        </div>
+                    `;
+                });
+                commentaryHTML += `</div>`;
+            }
 
             const avgSent = (totalSent / count).toFixed(1);
             const avgSup = supCount > 0 ? (supSum / supCount).toFixed(2) : "N/A";
