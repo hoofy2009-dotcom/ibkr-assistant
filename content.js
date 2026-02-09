@@ -380,18 +380,9 @@ class TradingAssistant {
             let newLeft = initialLeft + dx;
             let newTop = initialTop + dy;
 
-            // Boundary checks (Keep inside viewport)
-            const viewportWidth = window.innerWidth;
-            const viewportHeight = window.innerHeight;
-            const panelWidth = this.panel.offsetWidth;
-            const panelHeight = this.panel.offsetHeight;
-
-            // Clamp left/top
-            if (newLeft < 0) newLeft = 0;
-            if (newLeft + panelWidth > viewportWidth) newLeft = viewportWidth - panelWidth;
-            if (newTop < 0) newTop = 0;
-            if (newTop + panelHeight > viewportHeight) newTop = viewportHeight - panelHeight;
-
+            // REMOVED strict clamping to allow free movement across multi-monitor browser windows
+            // We only prevent it from being completely lost (e.g. extremely far off)
+            
             this.panel.style.left = newLeft + "px";
             this.panel.style.top = newTop + "px";
             
@@ -400,8 +391,12 @@ class TradingAssistant {
         });
 
         document.addEventListener("mouseup", () => {
-            isDragging = false;
-            setTimeout(() => { this.state.isDragging = false; }, 100);
+            if (isDragging) {
+                isDragging = false;
+                this.state.isDragging = false;
+                // Optional: Snap to edge or ensure fully visible only ON DROP
+                this.ensurePanelInView(); 
+            }
         });
 
         // Ensure visibility on resize
