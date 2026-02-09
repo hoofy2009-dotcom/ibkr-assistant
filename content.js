@@ -1042,34 +1042,56 @@ class TradingAssistant {
             // Only manual triggers will fan out to other models to节省调用
             if (!autoTriggerReason && gemKey) {
                 addTask("gemini", "Gemini", "#ba68c8", async () => {
-                    let modelID = (this.modelConfig && this.modelConfig.geminiModel) ? this.modelConfig.geminiModel : "gemini-1.5-flash";
-                    
-                    // Sanitize input: Remove 'models/' prefix if user pasted full path, and trim
-                    modelID = modelID.replace(/^models\//, "").trim();
-                    if(!modelID) modelID = "gemini-1.5-flash"; 
+                    let userModelID = (this.modelConfig && this.modelConfig.geminiModel) ? this.modelConfig.geminiModel : "gemini-1.5-flash";
+                    userModelID = userModelID.replace(/^models\//, "").trim();
+                    if(!userModelID) userModelID = "gemini-1.5-flash"; 
 
-                    // Construct URL dynamically based on model name
-                    // Standard pattern: .../models/{modelID}:generateContent
-                    const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/";
-                    const url = `${baseUrl}${modelID}:generateContent?key=${gemKey}`;
-                    
-                    console.log("[IBKR AI] Calling Gemini:", url.replace(gemKey, "***")); // Debug log
+                    const runGemini = async (mid) => {
+                         const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/";
+                         const url = `${baseUrl}${mid}:generateContent?key=${gemKey}`;
+                         console.log("[IBKR AI] Calling Gemini:", mid);
+                         return await runViaBackground(url, null, {
+                            contents: [{ parts: [{ text: "You are a Hedge Fund Manager. Return ONLY valid JSON. " + prompt }] }]
+                         }, 15000); // Increased timeout
+                    };
 
-                    const response = await runViaBackground(url, null, {
-                        contents: [{ parts: [{ text: "You are a Hedge Fund Manager. Return ONLY valid JSON. " + prompt }] }]
-                    }, 10000);
+                    let response;
+                    let usedModel = userModelID;
+
+                    try {
+                        response = await runGemini(userModelID);
+                    } catch (e) {
+                         const is404 = e.message.includes("404") || e.message.includes("NOT_FOUND");
+                         if (is404) {
+                             console.warn(`Gemini [${userModelID}] failed (404). Trying fallbacks...`);
+                             // Fallback chain: gemini-1.5-flash-latest -> gemini-pro
+                             const fallback = userModelID === "gemini-pro" ? null : "gemini-pro";
+                             
+                             if (fallback) {
+                                 try {
+                                     console.log(`Fallback to [${fallback}]`);
+                                     response = await runGemini(fallback);
+                                     usedModel = fallback;
+                                 } catch(e2) {
+                                     throw e2; // Fallback failed too
+                                 }
+                             } else {
+                                 throw e;
+                             }
+                         } else {
+                             throw e;
+                         }
+                    }
 
                     if (!response || !response.candidates || !response.candidates.length) {
                         if (response && response.promptFeedback && response.promptFeedback.blockReason) {
                             throw new Error("Gemini Blocked: " + response.promptFeedback.blockReason);
                         }
-                        // Include modelID in error for debugging
                         if (response && response.error) { 
-                             // 404 often comes with { error: { code: 404, message: "..." } }
                              const errMsg = response.error.message || JSON.stringify(response.error);
-                             throw new Error(`[${modelID}] ${errMsg}`);
+                             throw new Error(`[${usedModel}] ${errMsg}`);
                         }
-                        throw new Error(`Gemini Invalid Response (Model: ${modelID})`);
+                        throw new Error(`Gemini Invalid Response (Model: ${usedModel})`);
                     }
                     let raw = response.candidates[0].content.parts[0].text;
                     raw = raw.replace(/```json/g, "").replace(/```/g, "").trim();
