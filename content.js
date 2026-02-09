@@ -375,8 +375,25 @@ class TradingAssistant {
             if (!isDragging) return;
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
-            this.panel.style.left = (initialLeft + dx) + "px";
-            this.panel.style.top = (initialTop + dy) + "px";
+
+            // Calculate new position
+            let newLeft = initialLeft + dx;
+            let newTop = initialTop + dy;
+
+            // Boundary checks (Keep inside viewport)
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const panelWidth = this.panel.offsetWidth;
+            const panelHeight = this.panel.offsetHeight;
+
+            // Clamp left/top
+            if (newLeft < 0) newLeft = 0;
+            if (newLeft + panelWidth > viewportWidth) newLeft = viewportWidth - panelWidth;
+            if (newTop < 0) newTop = 0;
+            if (newTop + panelHeight > viewportHeight) newTop = viewportHeight - panelHeight;
+
+            this.panel.style.left = newLeft + "px";
+            this.panel.style.top = newTop + "px";
             
             // Sync AI Popup position
             this.positionAiPopup();
@@ -386,6 +403,46 @@ class TradingAssistant {
             isDragging = false;
             setTimeout(() => { this.state.isDragging = false; }, 100);
         });
+
+        // Ensure visibility on resize
+        window.addEventListener("resize", () => {
+             this.ensurePanelInView();
+             this.positionAiPopup();
+        });
+    }
+
+    ensurePanelInView() {
+        if (!this.panel) return;
+        const rect = this.panel.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        let newLeft = rect.left;
+        let newTop = rect.top;
+        let changed = false;
+
+        if (newLeft + rect.width > viewportWidth) {
+            newLeft = viewportWidth - rect.width - 20; // 20px padding
+            changed = true;
+        }
+        if (newLeft < 0) {
+            newLeft = 20;
+            changed = true;
+        }
+        if (newTop + rect.height > viewportHeight) {
+            newTop = viewportHeight - rect.height - 20;
+            changed = true;
+        }
+        if (newTop < 0) {
+            newTop = 100; // Reset to default top
+            changed = true;
+        }
+
+        if (changed) {
+            this.panel.style.left = newLeft + "px";
+            this.panel.style.top = newTop + "px";
+            this.panel.style.right = "auto";
+        }
     }
 
     toggleMinimize() {
