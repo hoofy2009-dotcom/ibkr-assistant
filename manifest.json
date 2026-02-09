@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "IBKR Trading Assistant",
+  "version": "1.0",
+  "description": "Real-time trading strategy assistant for IBKR Portal",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://feeds.finance.yahoo.com/*",
+    "https://query1.finance.yahoo.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.deepseek.com/*",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "https://dashscope.aliyuncs.com/*",
+    "https://ark.cn-beijing.volces.com/*",
+    "https://api.x.ai/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://interactivebrokers.com.au/portal/*",
+        "*://*.interactivebrokers.com.au/portal/*",
+        "*://interactivebrokers.com/portal/*",
+        "*://*.interactivebrokers.com/portal/*",
+        "*://interactivebrokers.co.uk/portal/*",
+        "*://*.interactivebrokers.co.uk/portal/*",
+        "*://ibkr.com.cn/portal/*",
+        "*://*.ibkr.com.cn/portal/*",
+        "*://ibkr.com/portal/*",
+        "*://*.ibkr.com/portal/*"
+      ],
+      "js": ["config.js", "content.js"],
+      "css": ["styles.css"]
+    }
+  ]
+}

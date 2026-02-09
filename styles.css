@@ -1,0 +1,414 @@
+.ibkr-assistant-panel {
+  position: fixed;
+  top: 100px;
+  right: 20px;
+  width: 260px; /* 更紧凑 */
+  background-color: #121212; /* 深色金融终端风格 */
+  color: #e0e0e0;
+  border: 1px solid #333;
+  border-left: 3px solid #007acc; /* 专业标识线 */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  font-family: 'Consolas', 'Monaco', monospace; /* 等宽字体方便看数字 */
+  z-index: 2147483647;
+  padding: 0;
+  font-size: 15px; /* Increased font size */
+  user-select: none; /* 防止拖拽时选中文字 */
+  border-radius: 4px;
+}
+
+.ibkr-assistant-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #1f1f1f;
+  border-bottom: 1px solid #333;
+  cursor: move; /* 提示可拖拽 */
+  border-radius: 4px 4px 0 0;
+}
+
+.ibkr-assistant-title {
+  font-weight: 600;
+  color: #007acc;
+  font-size: 13px;
+}
+
+.ibkr-assistant-content {
+  padding: 10px 12px;
+}
+
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  align-items: center;
+}
+
+.label {
+  color: #888;
+}
+
+.value {
+  font-weight: 600;
+}
+
+.value-up { color: #4caf50; }
+.value-down { color: #f44336; }
+
+.strategy-box {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #333;
+}
+
+.analysis-box {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: #1a1a1a;
+  border: 1px solid #333;
+  border-left: 2px solid #ff9800; /* Orange accent for commentary */
+  font-size: 11px;
+  line-height: 1.4;
+  color: #ccc;
+  font-family: 'Segoe UI', sans-serif; /* More readable for text */
+  /* max-height: 80px; Removed for full view */
+  /* overflow-y: auto; Removed for full view */
+  min-height: 40px;
+}
+.analysis-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
+}
+.btn-copy {
+  background: #2a2a2a;
+  border: 1px solid #555;
+  color: #ccc;
+  padding: 4px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.btn-copy:hover { border-color: #007acc; color: #fff; }
+
+/* --- New Features Styles --- */
+
+/* 1. Sparkline */
+.sparkline-container {
+    width: 100%;
+    height: 40px;
+    background: #181818;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #333;
+}
+
+/* 2. Sentiment Gauge */
+.sentiment-wrapper {
+    margin-top: 10px;
+    margin-bottom: 5px;
+}
+.sentiment-label {
+    font-size: 10px;
+    color: #888;
+    display: flex;
+    justify-content: space-between;
+}
+.sentiment-track {
+    height: 6px;
+    background: linear-gradient(90deg, #ff4d4d 0%, #ffff00 50%, #00cc00 100%);
+    border-radius: 3px;
+    position: relative;
+    margin-top: 2px;
+}
+.sentiment-marker {
+    width: 4px;
+    height: 10px;
+    background: #fff;
+    border: 1px solid #000;
+    position: absolute;
+    top: -2px;
+    transform: translateX(-50%);
+    transition: left 0.5s ease;
+}
+
+/* 3. Macro & Key Levels */
+.macro-ribbon {
+    font-size: 10px;
+    color: #aaa;
+    background: #151515;
+    padding: 2px 5px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+}
+.key-levels-box {
+    margin-top: 5px;
+    padding: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    font-size: 10px;
+    display: flex;
+    justify-content: space-around;
+    color: #ddd;
+}
+
+/* 4. Settings & Watchlist Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 2147483648;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+.modal-panel {
+    background: #1e1e1e;
+    border: 1px solid #007acc;
+    width: 320px;
+    padding: 15px;
+    border-radius: 6px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    color: #eee;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+.modal-header {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+}
+.modal-close-btn {
+    background: none; border: none; color: #888; cursor: pointer;
+}
+
+/* Watchlist Specifics */
+.watchlist-input-group {
+    display: flex;
+    margin-bottom: 10px;
+}
+.watchlist-input-group input {
+    flex: 1;
+    background: #333; border: 1px solid #555; color: white;
+    padding: 4px;
+    text-transform: uppercase;
+}
+.watchlist-input-group button {
+    background: #007acc; border: none; color: white;
+    padding: 0 10px; cursor: pointer;
+}
+.watchlist-items {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 150px;
+}
+.wl-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 4px;
+    border-bottom: 1px solid #333;
+    font-size: 12px;
+}
+.wl-item:hover { background: #252525; }
+.wl-symbol { font-weight: bold; width: 60px; }
+.wl-price { text-align: right; width: 80px; }
+.wl-change { text-align: right; width: 80px; }
+.wl-del { color: #555; cursor: pointer; padding-left: 5px;}
+.wl-del:hover { color: #ff5252; }
+
+/* Mini Watchlist (Pinned to bottom) */
+.mini-watchlist {
+    margin-top: 8px;
+    padding-top: 5px;
+    padding-right: 5px; /* Add padding for scrollbar */
+    border-top: 1px solid #333;
+    font-size: 13px; /* Slightly larger */
+    /* REMOVED max-height and overflow to show all items directly */
+    max-height: none; 
+    overflow-y: visible;
+}
+.mini-watchlist::-webkit-scrollbar { width: 4px; }
+.mini-watchlist::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
+
+.mini-wl-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 0;
+    color: #aaa;
+    margin-right: 2px;
+}
+.mini-wl-symbol { font-weight: bold; color: #ddd; width: 35px; flex-shrink: 0; white-space: nowrap; overflow: hidden; }
+.mini-wl-price { text-align: right; width: 50px; margin-right: 4px; color: #eee; font-family: monospace; }
+.mini-wl-action { text-align: center; width: 36px; font-size: 9px; flex-shrink: 0; margin-right: 4px; }
+.mini-wl-change { text-align: right; width: 50px; flex-shrink: 0; font-family: monospace; }
+
+/* Settings Styles (Adapted) */
+.setting-item {
+    margin-bottom: 10px;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.setting-item input {
+    background: #333;
+    border: 1px solid #555;
+    color: #fff;
+    width: 60px;
+    padding: 2px;
+    text-align: center;
+}
+.setting-item input[type="password"] {
+  width: 180px;
+  text-align: left;
+  letter-spacing: 0.5px;
+}
+.setting-item .model-input {
+  width: 200px;
+  text-align: left;
+}
+.settings-actions {
+    margin-top: 15px;
+    text-align: right;
+}
+.settings-hint {
+  font-size: 10px;
+  color: #888;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.btn-save {
+    background: #007acc;
+    border: none;
+    color: white;
+    padding: 4px 12px;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+/* Icons */
+.icon-btn {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 4px;
+}
+.icon-btn:hover { color: #fff; }
+
+.signal-badge {
+  display: block;
+  text-align: center;
+  padding: 6px;
+  border-radius: 2px;
+  font-weight: bold;
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.sig-buy { background: rgba(76, 175, 80, 0.2); color: #4caf50; border: 1px solid #4caf50; }
+.sig-sell { background: rgba(244, 67, 54, 0.2); color: #f44336; border: 1px solid #f44336; }
+.sig-hold { background: rgba(255, 152, 0, 0.2); color: #ff9800; border: 1px solid #ff9800; }
+.sig-risk { background: rgba(158, 158, 158, 0.2); color: #ccc; border: 1px solid #999; }
+
+.range-bar {
+  height: 4px;
+  background: #333;
+  margin-top: 4px;
+  position: relative;
+  border-radius: 2px;
+}
+.range-fill {
+  height: 100%;
+  background: #007acc;
+  position: absolute;
+  border-radius: 2px;
+}
+.range-cursor {
+  width: 4px;
+  height: 8px;
+  background: #fff;
+  position: absolute;
+  top: -2px;
+  margin-left: -2px;
+  box-shadow: 0 0 4px rgba(0,0,0,0.8);
+}
+
+.minimized-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    background: #1e1e1e;
+    border: 1px solid #007acc;
+    border-radius: 50%;
+    color: #007acc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    z-index: 2147483647;
+}
+
+/* AI Analysis Popup (Side Window) */
+.ibkr-ai-popup {
+    position: absolute;
+    top: 0;
+    right: 270px; /* Positioned to the left of the main panel (260px width + 10px gap) */
+    width: 300px;
+    background-color: #1a1a1a;
+    border: 1px solid #333;
+    border-left: 2px solid #ff9800;
+    box-shadow: -5px 5px 20px rgba(0, 0, 0, 0.5);
+    z-index: 2147483646; /* Slightly below main panel if they overlap, but high enough */
+    border-radius: 4px;
+    display: none; /* Hidden by default */
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.ibkr-ai-popup-header {
+    background-color: #252525;
+    padding: 8px 12px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 4px 4px 0 0;
+}
+
+.ibkr-ai-popup-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #ff9800;
+}
+
+.ibkr-ai-popup-close {
+    cursor: pointer;
+    color: #888;
+    background: none;
+    border: none;
+    font-size: 14px;
+}
+.ibkr-ai-popup-close:hover { color: #fff; }
+
+.ibkr-ai-popup-content {
+    padding: 12px;
+    font-size: 13px;
+    color: #eee;
+    line-height: 1.5;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.ibkr-ai-popup-content::-webkit-scrollbar { width: 6px; }
+.ibkr-ai-popup-content::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }

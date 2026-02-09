@@ -1,0 +1,20 @@
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# JetBrains
+.idea/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Temp
+tmp/
+temp/
+
+# Sensitive data (just in case user adds real keys later)
+config.local.js
+secrets.js
