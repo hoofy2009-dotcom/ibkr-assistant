@@ -33,7 +33,8 @@ class TradingAssistant {
         };
             // Model overrides (user-specified)
             this.modelConfig = {
-                doubaoModel: AI_CONFIG.DOUBAO_MODEL
+                doubaoModel: AI_CONFIG.DOUBAO_MODEL,
+                geminiModel: "gemini-3-pro-preview"
             };
         // Remote quote cache per symbol { price, session, ts }
         this.remoteQuoteCache = {};
@@ -107,7 +108,8 @@ class TradingAssistant {
                 };
                     // 4) Model overrides
                     this.modelConfig = result.assist_models || {
-                        doubaoModel: AI_CONFIG.DOUBAO_MODEL
+                        doubaoModel: AI_CONFIG.DOUBAO_MODEL,
+                        geminiModel: "gemini-3-pro-preview"
                     };
 
                 // Persist migrated data into chrome storage
@@ -262,6 +264,10 @@ class TradingAssistant {
                         <input type="password" id="set-gem-key" placeholder="仅本地保存" autocomplete="off">
                     </div>
                     <div class="setting-item">
+                        <span>Gemini 模型:</span>
+                        <input type="text" id="set-gemini-model" class="model-input" placeholder="默认: gemini-3-pro-preview" autocomplete="off">
+                    </div>
+                    <div class="setting-item">
                         <span>通义千问 Key:</span>
                         <input type="password" id="set-tongyi-key" placeholder="仅本地保存" autocomplete="off">
                     </div>
@@ -322,6 +328,7 @@ class TradingAssistant {
         document.getElementById("set-vol").value = this.settings.volThreshold;
         document.getElementById("set-ds-key").value = this.apiKeys.deepseekKey || "";
         document.getElementById("set-gem-key").value = this.apiKeys.geminiKey || "";
+        document.getElementById("set-gemini-model").value = this.modelConfig.geminiModel || "gemini-3-pro-preview";
         document.getElementById("set-tongyi-key").value = this.apiKeys.tongyiKey || "";
         document.getElementById("set-doubao-key").value = this.apiKeys.doubaoKey || "";
         document.getElementById("set-claude-key").value = this.apiKeys.claudeKey || "";
@@ -1018,7 +1025,13 @@ class TradingAssistant {
             // Only manual triggers will fan out to other models to节省调用
             if (!autoTriggerReason && gemKey) {
                 addTask("gemini", "Gemini", "#ba68c8", async () => {
-                    const url = `${AI_CONFIG.GEMINI_URL}?key=${gemKey}`;
+                    const modelID = (this.modelConfig && this.modelConfig.geminiModel) ? this.modelConfig.geminiModel : "gemini-3-pro-preview";
+                    
+                    // Construct URL dynamically based on model name
+                    // Standard pattern: .../models/{modelID}:generateContent
+                    const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/";
+                    const url = `${baseUrl}${modelID}:generateContent?key=${gemKey}`;
+                    
                     const response = await runViaBackground(url, null, {
                         contents: [{ parts: [{ text: "You are a Hedge Fund Manager. Return ONLY valid JSON. " + prompt }] }]
                     }, 10000);
@@ -1670,10 +1683,12 @@ class TradingAssistant {
             chatgptKey: document.getElementById("set-chatgpt-key").value.trim(),
             grokKey: document.getElementById("set-grok-key").value.trim()
         };
-        this.modelConfig = {
-            doubaoModel: document.getElementById("set-doubao-model").value.trim() || AI_CONFIG.DOUBAO_MODEL
-        };
-        
+        // Save Models
+        const dbModel = document.getElementById("set-doubao-model").value;
+        const gemModel = document.getElementById("set-gemini-model").value;
+        this.modelConfig.doubaoModel = dbModel;
+        this.modelConfig.geminiModel = gemModel;
+
         chrome.storage.local.set({
             assist_settings: this.settings,
             assist_keys: this.apiKeys,
