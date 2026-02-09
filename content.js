@@ -988,6 +988,32 @@ class TradingAssistant {
             // Add clear indication of processing in sidebar
             this.updateAiPopup("正在进行多模型会诊分析...", ctx.symbol, true);
 
+            // Helpers for OpenAI-compatible endpoints
+            const buildOAIBody = (model) => ({
+                model,
+                messages: [
+                    { role: "system", content: "You are a Hedge Fund Manager. Return ONLY valid JSON." },
+                    { role: "user", content: prompt }
+                ],
+                temperature: 0.4,
+                max_tokens: 350
+            });
+
+            const runViaBackground = (url, headers, body, timeoutMs = 12000) => {
+                return this.fetchWithTimeout(() => new Promise((resolve, reject) => {
+                    chrome.runtime.sendMessage({
+                        action: "FETCH_AI",
+                        url,
+                        method: "POST",
+                        headers,
+                        body
+                    }, (res) => {
+                        if (res && res.success) resolve(res.data);
+                        else reject(new Error(res ? res.error : "Background Fetch Failed"));
+                    });
+                }), timeoutMs, 0);
+            };
+
             const addTask = (id, name, color, executor) => {
                 providers.push({ id, name, color });
                 tasks.push((async () => {
@@ -1064,32 +1090,6 @@ class TradingAssistant {
                     return JSON.parse(raw);
                 });
             }
-
-            // Helpers for OpenAI-compatible endpoints
-            const buildOAIBody = (model) => ({
-                model,
-                messages: [
-                    { role: "system", content: "You are a Hedge Fund Manager. Return ONLY valid JSON." },
-                    { role: "user", content: prompt }
-                ],
-                temperature: 0.4,
-                max_tokens: 350
-            });
-
-            const runViaBackground = (url, headers, body, timeoutMs = 12000) => {
-                return this.fetchWithTimeout(() => new Promise((resolve, reject) => {
-                    chrome.runtime.sendMessage({
-                        action: "FETCH_AI",
-                        url,
-                        method: "POST",
-                        headers,
-                        body
-                    }, (res) => {
-                        if (res && res.success) resolve(res.data);
-                        else reject(new Error(res ? res.error : "Background Fetch Failed"));
-                    });
-                }), timeoutMs, 0);
-            };
 
             // Only manual triggers will fan out to other models to节省调用
             if (!autoTriggerReason && gemKey) {
