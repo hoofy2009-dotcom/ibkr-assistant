@@ -139,6 +139,7 @@ class TradingAssistant {
 
     createPanel() {
         this.panel = document.createElement("div");
+        this.panel.id = "ibkr-pnl-panel"; // Set ID for positioning references
         this.panel.className = "ibkr-assistant-panel";
         this.panel.innerHTML = `
             <div class="ibkr-assistant-header" id="ibkr-drag-handle">

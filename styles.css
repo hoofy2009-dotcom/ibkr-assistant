@@ -362,7 +362,7 @@
 
 /* AI Analysis Popup (Side Window) */
 .ibkr-ai-popup {
-    position: absolute;
+    position: fixed; /* Changed from absolute to fixed to match main panel behavior */
     top: 0;
     right: 270px; /* Positioned to the left of the main panel (260px width + 10px gap) */
     width: 300px;
