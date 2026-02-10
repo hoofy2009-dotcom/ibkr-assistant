@@ -1447,6 +1447,13 @@ class TradingAssistant {
                     <button class="ibkr-ai-popup-close" id="ibkr-ai-popup-close">✕</button>
                 </div>
                 <div class="ibkr-ai-popup-content" id="ibkr-ai-popup-content"></div>
+                <div class="ibkr-ai-popup-chat" id="ibkr-ai-popup-chat">
+                    <div class="ibkr-ai-chat-history" id="ibkr-ai-chat-history"></div>
+                    <div class="ibkr-ai-chat-input-wrapper">
+                        <input type="text" id="ibkr-ai-chat-input" placeholder="继续提问..." />
+                        <button id="ibkr-ai-chat-send">发送</button>
+                    </div>
+                </div>
             `;
             // Append to body so visibility isn't dependent on the panel's parent
             document.body.appendChild(popup);
@@ -1459,6 +1466,9 @@ class TradingAssistant {
                     popup.style.display = "none";
                 });
             }
+
+            // Chat handlers
+            this.setupChatHandlers();
         }
 
         const contentDiv = document.getElementById("ibkr-ai-popup-content");
@@ -1475,6 +1485,99 @@ class TradingAssistant {
 
         try { console.log(`[IBKR AI] updateAiPopup: title=${title} loading=${!!isLoading}`); } catch(e) {}
         this.positionAiPopup();
+    }
+
+    setupChatHandlers() {
+        const sendBtn = document.getElementById("ibkr-ai-chat-send");
+        const input = document.getElementById("ibkr-ai-chat-input");
+        
+        const sendMessage = async () => {
+            const question = input.value.trim();
+            if (!question) return;
+            
+            input.value = "";
+            this.addChatMessage("user", question);
+            this.addChatMessage("assistant", "正在思考...", true);
+            
+            try {
+                const answer = await this.askFollowUpQuestion(question);
+                this.updateLastChatMessage(answer);
+            } catch (e) {
+                this.updateLastChatMessage("抱歉，回答失败: " + e.message);
+            }
+        };
+        
+        if (sendBtn) {
+            sendBtn.addEventListener("click", sendMessage);
+        }
+        
+        if (input) {
+            input.addEventListener("keypress", (e) => {
+                if (e.key === "Enter") {
+                    sendMessage();
+                }
+            });
+        }
+    }
+
+    addChatMessage(role, content, isLoading = false) {
+        const history = document.getElementById("ibkr-ai-chat-history");
+        if (!history) return;
+        
+        const msgDiv = document.createElement("div");
+        msgDiv.className = `ibkr-chat-msg ibkr-chat-msg-${role}`;
+        if (isLoading) msgDiv.classList.add("ibkr-chat-loading");
+        msgDiv.innerHTML = `<div class="ibkr-chat-msg-content">${content}</div>`;
+        history.appendChild(msgDiv);
+        history.scrollTop = history.scrollHeight;
+    }
+
+    updateLastChatMessage(content) {
+        const history = document.getElementById("ibkr-ai-chat-history");
+        if (!history) return;
+        
+        const lastMsg = history.lastElementChild;
+        if (lastMsg) {
+            lastMsg.classList.remove("ibkr-chat-loading");
+            lastMsg.querySelector(".ibkr-chat-msg-content").textContent = content;
+        }
+    }
+
+    async askFollowUpQuestion(question) {
+        // Use the primary AI (DeepSeek by default)
+        const ctx = {
+            symbol: this.state.symbol,
+            price: this.state.price
+        };
+        
+        const prompt = `用户针对 ${ctx.symbol} (当前价格: $${ctx.price}) 的追问：
+"${question}"
+
+请简洁回答（100字以内），基于之前的分析给出专业意见。`;
+
+        const deepseekKey = this.apiKeys.deepseekKey;
+        if (!this.keyFilled(deepseekKey)) {
+            throw new Error("DeepSeek API Key 未配置");
+        }
+
+        const url = AI_CONFIG.DEEPSEEK_URL;
+        const headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${deepseekKey}`
+        };
+        const body = {
+            model: AI_CONFIG.DEEPSEEK_MODEL || "deepseek-chat",
+            messages: [{ role: "user", content: prompt }],
+            max_tokens: 200,
+            temperature: 0.7
+        };
+
+        const resp = await this.runViaBackground(url, headers, body);
+        if (!resp.choices || !resp.choices.length) {
+            throw new Error("Empty Response");
+        }
+        
+        return resp.choices[0].message.content.trim();
     }
 
     positionAiPopup() {
@@ -1757,6 +1860,74 @@ class TradingAssistant {
             toast.style.transition = "opacity 0.3s";
             setTimeout(() => toast.remove(), 300);
         }, 2200);
+    }
+
+    showTopBanner(msg, action) {
+        // 移除已存在的横幅
+        const existing = document.getElementById("ibkr-top-banner");
+        if (existing) existing.remove();
+
+        const banner = document.createElement("div");
+        banner.id = "ibkr-top-banner";
+        
+        const colors = {
+            "BUY": { bg: "#4caf50", text: "#fff" },
+            "SELL": { bg: "#f44336", text: "#fff" },
+            "HOLD": { bg: "#ffa726", text: "#000" }
+        };
+        
+        const color = colors[action] || colors.HOLD;
+        
+        banner.style.position = "fixed";
+        banner.style.top = "0";
+        banner.style.left = "0";
+        banner.style.width = "100%";
+        banner.style.background = color.bg;
+        banner.style.color = color.text;
+        banner.style.padding = "12px 20px";
+        banner.style.fontSize = "14px";
+        banner.style.fontWeight = "bold";
+        banner.style.textAlign = "center";
+        banner.style.zIndex = 2147483646;
+        banner.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+        banner.style.display = "flex";
+        banner.style.alignItems = "center";
+        banner.style.justifyContent = "center";
+        banner.style.gap = "10px";
+        
+        banner.innerHTML = `
+            <span>${msg}</span>
+            <button id="ibkr-banner-close" style="
+                background: rgba(255,255,255,0.2);
+                border: none;
+                color: ${color.text};
+                padding: 4px 8px;
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 12px;
+            ">关闭</button>
+        `;
+        
+        document.body.prepend(banner);
+        
+        // 自动关闭
+        setTimeout(() => {
+            if (banner.parentNode) {
+                banner.style.opacity = "0";
+                banner.style.transition = "opacity 0.5s";
+                setTimeout(() => banner.remove(), 500);
+            }
+        }, 10000);
+        
+        // 手动关闭
+        const closeBtn = document.getElementById("ibkr-banner-close");
+        if (closeBtn) {
+            closeBtn.addEventListener("click", () => {
+                banner.style.opacity = "0";
+                banner.style.transition = "opacity 0.3s";
+                setTimeout(() => banner.remove(), 300);
+            });
+        }
     }
 
     formatGeminiError(msg) {
@@ -2121,6 +2292,13 @@ class TradeExecutor {
     }
 
     evaluateSignal(action, sentiment, ctx) {
+        // 显示顶部横幅通知（买入、持有、追涨）
+        if (action === "BUY" || action === "HOLD") {
+            const actionText = action === "BUY" ? "买入信号" : "持有建议";
+            const actionEmoji = action === "BUY" ? "📈" : "✋";
+            this.app.showTopBanner(`${actionEmoji} ${ctx.symbol}: ${actionText} (情绪评分: ${sentiment}/10)`, action);
+        }
+
         if (action === "HOLD") return;
 
         // Safety Gates
