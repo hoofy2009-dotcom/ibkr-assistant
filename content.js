@@ -42,6 +42,49 @@ class TradingAssistant {
         this.initPromise = this.init();
     }
 
+    // Try professional macro sources (CBOE / TradingView) via proxyFetch.
+    // This is intentionally flexible: attempt several candidate endpoints and
+    // return the first successful parsed { symbol, price } object or null.
+    async fetchExternalMacro(symbol) {
+        // Candidate endpoints (may require proxyFetch to avoid CORS). Extend as needed.
+        const candidates = [
+            // CBOE delayed quotes (try JSON endpoint)
+            `https://cdn.cboe.com/api/global/delayed_quotes?symbols=${encodeURIComponent(symbol)}`,
+            // Alternative CBOE index endpoint (some deployments)
+            `https://cdn.cboe.com/api/index/delayed/${encodeURIComponent(symbol)}`,
+            // TradingView scanner API (generic) - may not always work but worth a try
+            `https://scanner.tradingview.com/america/scan`,
+            // Fallback to Yahoo (already used by fetchTickerData) but include for completeness
+            `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2d`
+        ];
+
+        for (let url of candidates) {
+            try {
+                const raw = await this.proxyFetch(url);
+                if (!raw) continue;
+                // Try to parse JSON; different providers use different shapes
+                try {
+                    const j = JSON.parse(raw);
+                    // CBOE: look for quotes array
+                    if (j && j.quotes && j.quotes.length && j.quotes[0].last) {
+                        return { symbol, price: parseFloat(j.quotes[0].last) };
+                    }
+                    // Yahoo chart response
+                    if (j && j.chart && j.chart.result && j.chart.result[0]) {
+                        const meta = j.chart.result[0].meta;
+                        if (meta && meta.regularMarketPrice != null) return { symbol, price: parseFloat(meta.regularMarketPrice) };
+                    }
+                } catch(e) {
+                    // Not JSON; skip
+                }
+            } catch(e) {
+                // ignore and try next candidate
+                console.warn('fetchExternalMacro candidate failed', url, e.message || e);
+            }
+        }
+        return null;
+    }
+
     keyFilled(k) {
         return !!(k && k.trim() && !k.startsWith("__REPLACE"));
     }
@@ -949,6 +992,9 @@ class TradingAssistant {
 
         try {
             const ctx = this.currentMarketContext;
+
+            // [FIX] Show popup immediately so user knows it is working
+            this.updateAiPopup("Initiating AI Analysis...<br/>Fetching News & Macro Data...", ctx.symbol, true);
             
             // 1. Fetch News First
             const newsHeadlines = await this.fetchMarketNews(ctx.symbol);
@@ -1391,8 +1437,7 @@ class TradingAssistant {
         let popup = document.getElementById("ibkr-ai-popup");
         if (!popup) {
             const panel = document.getElementById("ibkr-pnl-panel");
-            if (!panel) return;
-            
+            // Do NOT return if panel missing. Some IBKR pages change DOM; show popup anyway.
             popup = document.createElement("div");
             popup.id = "ibkr-ai-popup";
             popup.className = "ibkr-ai-popup";
@@ -1403,36 +1448,40 @@ class TradingAssistant {
                 </div>
                 <div class="ibkr-ai-popup-content" id="ibkr-ai-popup-content"></div>
             `;
-            // Append to body to ensure correct positioning relative to viewport or panel parent
+            // Append to body so visibility isn't dependent on the panel's parent
             document.body.appendChild(popup);
-            
-            // Make draggable/movable consistent with panel logic if needed, 
-            // for now, statically position via JS relative to main panel
-            this.positionAiPopup();
+            popup.style.zIndex = 2147483647;
 
-            document.getElementById("ibkr-ai-popup-close").addEventListener("click", () => {
-                popup.style.display = "none";
-            });
+            // Close handler
+            const closeBtn = document.getElementById("ibkr-ai-popup-close");
+            if (closeBtn) {
+                closeBtn.addEventListener("click", () => {
+                    popup.style.display = "none";
+                });
+            }
         }
-        
+
         const contentDiv = document.getElementById("ibkr-ai-popup-content");
-        document.querySelector(".ibkr-ai-popup-title").innerText = title || "AI Analysis";
-        
+        const titleEl = document.querySelector(".ibkr-ai-popup-title");
+        if (titleEl) titleEl.innerText = title || "AI Analysis";
+
         if (isLoading) {
              popup.style.display = "block";
-             contentDiv.innerHTML = `<div style="text-align:center; padding:20px; color:#aaa;">Thinking...<br/>(Calling DeepSeek & Gemini)</div>`;
+             if (contentDiv) contentDiv.innerHTML = `<div style="text-align:center; padding:20px; color:#aaa;">Thinking...<br/>(Calling DeepSeek & Models)</div>`;
         } else {
              popup.style.display = "block";
-             contentDiv.innerHTML = contentHtml;
+             if (contentDiv) contentDiv.innerHTML = contentHtml;
         }
-        
+
+        try { console.log(`[IBKR AI] updateAiPopup: title=${title} loading=${!!isLoading}`); } catch(e) {}
         this.positionAiPopup();
     }
 
     positionAiPopup() {
         const popup = document.getElementById("ibkr-ai-popup");
         const panel = document.getElementById("ibkr-pnl-panel");
-        if (popup && panel) {
+        if (popup) {
+            if (panel) {
             const rect = panel.getBoundingClientRect();
             const popupWidth = 300; // css defined width
             const gap = 10;
@@ -1448,6 +1497,13 @@ class TradingAssistant {
 
             popup.style.top = rect.top + "px";
             popup.style.left = leftPos + "px";
+            popup.style.right = "auto"; // Force clear right to prevent CSS conflict
+            } else {
+                // No panel found: position to top-right corner
+                popup.style.top = "20px";
+                popup.style.right = "20px";
+                popup.style.left = "auto";
+            }
         }
     }
 
@@ -1572,14 +1628,22 @@ class TradingAssistant {
         if (this.macroCache && (Date.now() - this.macroCache.ts < 300000)) return; 
         
         try {
-            const [spy, vix, xlk, xlf, iwm, tnx] = await Promise.all([
+            // Try primary providers, but prefer external professional sources when available
+            const [spy, xlk, xlf, iwm] = await Promise.all([
                 this.fetchTickerData("SPY"),
-                this.fetchTickerData("^VIX"), 
-                this.fetchTickerData("XLK"),  
+                this.fetchTickerData("XLK"),
                 this.fetchTickerData("XLF"),
-                this.fetchTickerData("IWM"),
-                this.fetchTickerData("^TNX")
+                this.fetchTickerData("IWM")
             ]);
+
+            // For VIX and TNX try external providers first (CBOE / TradingView via proxyFetch)
+            let vix = null, tnx = null;
+            try { vix = await this.fetchExternalMacro('^VIX'); } catch(e){ console.warn('fetchExternalMacro VIX failed', e); }
+            try { tnx = await this.fetchExternalMacro('^TNX'); } catch(e){ console.warn('fetchExternalMacro TNX failed', e); }
+
+            // Fallback to Yahoo if external provider didn't return usable data
+            if (!vix) vix = await this.fetchTickerData("^VIX");
+            if (!tnx) tnx = await this.fetchTickerData("^TNX");
 
             let regime = "Normal";
             let vixVal = vix ? vix.price : 0;
@@ -1805,16 +1869,98 @@ class TradingAssistant {
 
             const summary = sortedKeys.map(k => {
                 // Join parts (e.g. Symbol part + Data part)
-                return map.get(k).join(" | "); 
+                return map.get(k).join(" "); 
             })
             .filter(t => t.length > 3 && /[0-9]/.test(t)) // Filter out empty headers
             .slice(0, 20) // Limit to top 20 rows
             .join("\n");
 
+            // Attach click handlers so user can click a row to deep-dive
+            try { this.attachPortfolioRowHandlers(rows); } catch(e) { console.warn("attachPortfolioRowHandlers failed", e); }
+
             return summary || "None detected";
         } catch (e) {
             return "Error scanning portfolio";
         }
+    }
+
+    // Make visible portfolio rows clickable for deep-dive analysis
+    attachPortfolioRowHandlers(rows) {
+        if (!rows || !rows.length) return;
+        rows.forEach(r => {
+            try {
+                r.style.cursor = 'pointer';
+                r.title = '点击查看持仓深度分析';
+                // Avoid duplicate handlers
+                if (!r.__ibkr_row_click) {
+                    r.__ibkr_row_click = true;
+                    r.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        const txt = r.innerText.replace(/[\r\n]+/g, ' ').trim();
+                        this.onPortfolioRowClick(txt, r);
+                    });
+                }
+            } catch(e) {}
+        });
+    }
+
+    // Called when a portfolio row is clicked. Parse basic fields and show popup with Analyze button.
+    onPortfolioRowClick(rowText, rowEl) {
+        // Try to heuristically parse: symbol, shares, avg price, cost
+        let symbol = null, shares = null, avg = null;
+        // Symbol: first uppercase token of 1-5 letters
+        const symMatch = rowText.match(/\b([A-Z]{1,5})\b/);
+        if (symMatch) symbol = symMatch[1];
+
+        // Shares: look for patterns like '100', '100.0', or 'Shares: 100'
+        const shMatch = rowText.match(/(\d{1,6}(?:[\.,]\d{1,3})?)\s*(?:shares|sh|股)?/i);
+        if (shMatch) shares = parseFloat(shMatch[1].replace(/,/g, ''));
+
+        // Avg price: look for '@ 123.45' or 'Avg: 123.45' or '平均价 123.45'
+        const avgMatch = rowText.match(/(?:@|Avg(?:\w*)?:|平均价\s*)(\d{1,6}(?:[\.,]\d{1,4})?)/i);
+        if (avgMatch) avg = parseFloat(avgMatch[1].replace(/,/g, ''));
+
+        // Build display
+        let html = `<div style="font-size:13px;">
+            <div><b>Row:</b> ${symbol || 'Unknown'}</div>
+            <div><b>Shares:</b> ${shares != null ? shares : 'Unknown'}</div>
+            <div><b>Avg:</b> ${avg != null ? avg : 'Unknown'}</div>
+            <div style="margin-top:8px; color:#ccc; font-size:12px;">原始行: <div style='font-size:11px; color:#999; margin-top:6px;'>${rowText}</div></div>
+            <div style="margin-top:8px; text-align:right;"><button id='__ibkr_analyze_row' style='background:#007acc;color:#fff;border:none;padding:6px 8px;border-radius:3px;cursor:pointer;'>AI 深度分析</button></div>
+        </div>`;
+
+        this.updateAiPopup(html, `${symbol || 'Position'} Deep-Dive`, false);
+
+        // Click handler for analyze button
+        setTimeout(() => {
+            const btn = document.getElementById('__ibkr_analyze_row');
+            if (!btn) return;
+            btn.onclick = async () => {
+                // Prepare context for AI
+                const ctx = this.currentMarketContext || {};
+                ctx.position = ctx.position || {};
+                if (symbol) ctx.symbol = symbol;
+                if (shares != null) ctx.position.shares = shares;
+                if (avg != null) ctx.position.avgPrice = avg;
+                // Set PnL if current price known
+                if (ctx.price && ctx.position && ctx.position.avgPrice) {
+                    const mktVal = ctx.position.shares * ctx.price;
+                    const cost = ctx.position.shares * ctx.position.avgPrice;
+                    ctx.pnlPercentage = ((mktVal - cost)/cost) * 100;
+                }
+                // Ensure popup indicates loading
+                this.updateAiPopup('Preparing portfolio deep-dive...<br/>调用模型中...', `${ctx.symbol} Deep-Dive`, true);
+                // Trigger the normal AI pipeline (manual)
+                try {
+                    // Give triggerAIAnalysis a hint by setting lastAutoRun small to allow immediate run
+                    this.lastAutoRun = 0;
+                    await this.triggerAIAnalysis(null);
+                } catch(e) {
+                    console.error('Deep-dive analyze failed', e);
+                    this.updateAiPopup(`<div style="color:#ff5252">分析失败: ${e.message}</div>`, `${ctx.symbol} Deep-Dive`, false);
+                }
+            };
+        }, 200);
     }
 
     async updateWatchlistData() {
