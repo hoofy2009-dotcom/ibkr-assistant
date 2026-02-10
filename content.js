@@ -1572,12 +1572,28 @@ class TradingAssistant {
             temperature: 0.7
         };
 
-        const resp = await this.runViaBackground(url, headers, body);
-        if (!resp.choices || !resp.choices.length) {
-            throw new Error("Empty Response");
-        }
-        
-        return resp.choices[0].message.content.trim();
+        // Use chrome.runtime.sendMessage to call background script
+        return new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage(
+                { action: "FETCH_AI", url, headers, body },
+                (response) => {
+                    if (chrome.runtime.lastError) {
+                        reject(new Error(chrome.runtime.lastError.message));
+                        return;
+                    }
+                    if (!response.success) {
+                        reject(new Error(response.error || "API调用失败"));
+                        return;
+                    }
+                    const resp = response.data;
+                    if (!resp.choices || !resp.choices.length) {
+                        reject(new Error("Empty Response"));
+                        return;
+                    }
+                    resolve(resp.choices[0].message.content.trim());
+                }
+            );
+        });
     }
 
     positionAiPopup() {
@@ -2193,19 +2209,24 @@ class TradingAssistant {
                 // Based on simple daily change thresholds
                 let action = "观望";
                 let actionColor = "#555";
+                let actionReason = "涨跌幅在正常波动范围内";
                 
                 if (changeP >= 3.0) { 
                     action = "🚀追涨"; 
                     actionColor = "#4caf50"; // Green
+                    actionReason = `日内涨幅${changeP.toFixed(2)}%，强势突破，考虑追涨机会`;
                 } else if (changeP >= 1.0) {
                     action = "持有";
                     actionColor = "#81c784"; // Light Green
+                    actionReason = `日内涨幅${changeP.toFixed(2)}%，温和上涨，建议持有观察`;
                 } else if (changeP <= -5.0) {
                     action = "⚠️避险";
                     actionColor = "#ef5350"; // Red
+                    actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，大幅下跌，注意避险`;
                 } else if (changeP <= -2.5) {
                     action = "🛒抄底";
                     actionColor = "#ff9800"; // Orange
+                    actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，回调明显，可考虑分批抄底`;
                 }
 
                 // 1. Update Modal UI
@@ -2218,12 +2239,14 @@ class TradingAssistant {
                     pEl.style.color = "#eee";
                 }
 
-                // 2. Build Mini List HTML
+                // 2. Build Mini List HTML with tooltip
                 miniHTML += `
                     <div class="mini-wl-row">
                         <span class="mini-wl-symbol" title="${sym}">${sym}</span>
                         <span class="mini-wl-price">${price.toFixed(2)}</span>
-                        <span class="mini-wl-action" style="color:${actionColor}; border:1px solid ${actionColor}; border-radius:3px;">${action}</span>
+                        <span class="mini-wl-action" 
+                              style="color:${actionColor}; border:1px solid ${actionColor}; border-radius:3px; cursor:help;" 
+                              title="${actionReason}">${action}</span>
                         <span class="mini-wl-change ${colorClass}">${changeStr}</span>
                     </div>
                 `;
@@ -2292,11 +2315,9 @@ class TradeExecutor {
     }
 
     evaluateSignal(action, sentiment, ctx) {
-        // 显示顶部横幅通知（买入、持有、追涨）
-        if (action === "BUY" || action === "HOLD") {
-            const actionText = action === "BUY" ? "买入信号" : "持有建议";
-            const actionEmoji = action === "BUY" ? "📈" : "✋";
-            this.app.showTopBanner(`${actionEmoji} ${ctx.symbol}: ${actionText} (情绪评分: ${sentiment}/10)`, action);
+        // 显示顶部横幅通知（仅买入/追涨时）
+        if (action === "BUY") {
+            this.app.showTopBanner(`📈 ${ctx.symbol}: 买入信号 (情绪评分: ${sentiment}/10)`, action);
         }
 
         if (action === "HOLD") return;
