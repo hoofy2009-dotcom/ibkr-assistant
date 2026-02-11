@@ -708,9 +708,13 @@ class TradingAssistant {
         }
         if (!symbol) symbol = "DETECTED";
 
-        // Kick off remote quote refresh (non-blocking) every 20s per symbol
+        // Kick off remote quote refresh (non-blocking)
         const cache = this.remoteQuoteCache[symbol];
-        if (symbol !== "DETECTED" && (!cache || (now - cache.ts) > 20000)) {
+        const needsRefresh = !cache || (now - cache.ts) > 20000;
+        const isNewSymbol = symbol !== this.state.symbol;
+        
+        if (symbol !== "DETECTED" && (needsRefresh || isNewSymbol)) {
+            // 立即获取新 symbol 的日内数据
             this.fetchRemoteQuote(symbol);
         }
 
@@ -789,8 +793,17 @@ class TradingAssistant {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
         } else {
-            this.state.sessionHigh = Math.max(this.state.sessionHigh, price);
-            this.state.sessionLow = Math.min(this.state.sessionLow, price);
+            // 优先使用 Yahoo API 的真实日内高低点
+            const remote = this.remoteQuoteCache[symbol];
+            if (remote && remote.dayHigh && remote.dayLow && (now - remote.ts) < 30000) {
+                // 使用远程数据的真实日内高低点
+                this.state.sessionHigh = remote.dayHigh;
+                this.state.sessionLow = remote.dayLow;
+            } else {
+                // 回退到本地观察的高低点（仅在无远程数据时）
+                this.state.sessionHigh = Math.max(this.state.sessionHigh, price);
+                this.state.sessionLow = Math.min(this.state.sessionLow, price);
+            }
         }
 
         this.updateUI(symbol || this.state.symbol, price, position);
@@ -1156,13 +1169,28 @@ class TradingAssistant {
                 if (valid.length) price = valid[valid.length - 1];
             }
 
+            // 提取真实的日内高低点（开盘后到现在的区间）
+            let dayHigh = meta.regularMarketDayHigh;
+            let dayLow = meta.regularMarketDayLow;
+            
+            // 如果是盘前/盘后，使用前一交易日的高低点作为参考
+            if (!dayHigh || !dayLow) {
+                dayHigh = meta.previousClose || price;
+                dayLow = meta.previousClose || price;
+            }
+
             if (price != null) {
                 this.remoteQuoteCache[symbol] = {
                     price: parseFloat(price),
                     session,
                     marketState: meta.marketState || session,
+                    dayHigh: parseFloat(dayHigh) || price,
+                    dayLow: parseFloat(dayLow) || price,
+                    previousClose: parseFloat(meta.previousClose) || price,
                     ts: Date.now()
                 };
+                
+                console.log(`📊 Remote Quote for ${symbol}: Price=${price}, DayHigh=${dayHigh}, DayLow=${dayLow}, Session=${session}`);
             }
         } catch (e) {
             console.warn("Remote quote fetch failed", e);
