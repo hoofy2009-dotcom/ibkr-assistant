@@ -1,4 +1,4 @@
-{
+﻿{
   "manifest_version": 3,
   "name": "IBKR Trading Assistant",
   "version": "1.0",
@@ -10,6 +10,20 @@
     "storage"
   ],
   "host_permissions": [
+    "*://interactivebrokers.com.au/*",
+    "*://*.interactivebrokers.com.au/*",
+    "*://interactivebrokers.com.sg/*",
+    "*://*.interactivebrokers.com.sg/*",
+    "*://interactivebrokers.com.hk/*",
+    "*://*.interactivebrokers.com.hk/*",
+    "*://interactivebrokers.com/*",
+    "*://*.interactivebrokers.com/*",
+    "*://interactivebrokers.co.uk/*",
+    "*://*.interactivebrokers.co.uk/*",
+    "*://ibkr.com.cn/*",
+    "*://*.ibkr.com.cn/*",
+    "*://ibkr.com/*",
+    "*://*.ibkr.com/*",
     "https://feeds.finance.yahoo.com/*",
     "https://query1.finance.yahoo.com/*",
     "https://generativelanguage.googleapis.com/*",
@@ -18,21 +32,28 @@
     "https://api.anthropic.com/*",
     "https://dashscope.aliyuncs.com/*",
     "https://ark.cn-beijing.volces.com/*",
-    "https://api.x.ai/*"
+    "https://api.x.ai/*",
+    "https://openrouter.ai/*",
+    "https://cdn.cboe.com/*",
+    "https://scanner.tradingview.com/*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "*://interactivebrokers.com.au/portal/*",
-        "*://*.interactivebrokers.com.au/portal/*",
-        "*://interactivebrokers.com/portal/*",
-        "*://*.interactivebrokers.com/portal/*",
-        "*://interactivebrokers.co.uk/portal/*",
-        "*://*.interactivebrokers.co.uk/portal/*",
-        "*://ibkr.com.cn/portal/*",
-        "*://*.ibkr.com.cn/portal/*",
-        "*://ibkr.com/portal/*",
-        "*://*.ibkr.com/portal/*"
+        "*://interactivebrokers.com.au/*",
+        "*://*.interactivebrokers.com.au/*",
+        "*://interactivebrokers.com.sg/*",
+        "*://*.interactivebrokers.com.sg/*",
+        "*://interactivebrokers.com.hk/*",
+        "*://*.interactivebrokers.com.hk/*",
+        "*://interactivebrokers.com/*",
+        "*://*.interactivebrokers.com/*",
+        "*://interactivebrokers.co.uk/*",
+        "*://*.interactivebrokers.co.uk/*",
+        "*://ibkr.com.cn/*",
+        "*://*.ibkr.com.cn/*",
+        "*://ibkr.com/*",
+        "*://*.ibkr.com/*"
       ],
       "js": ["config.js", "content.js"],
       "css": ["styles.css"]

@@ -46,16 +46,14 @@ class TradingAssistant {
     // This is intentionally flexible: attempt several candidate endpoints and
     // return the first successful parsed { symbol, price } object or null.
     async fetchExternalMacro(symbol) {
-        // Candidate endpoints (may require proxyFetch to avoid CORS). Extend as needed.
+        // 优先使用 Yahoo Finance（最可靠且无权限限制）
+        // CBOE 和 TradingView 需要额外认证，容易 403
         const candidates = [
-            // CBOE delayed quotes (try JSON endpoint)
-            `https://cdn.cboe.com/api/global/delayed_quotes?symbols=${encodeURIComponent(symbol)}`,
-            // Alternative CBOE index endpoint (some deployments)
-            `https://cdn.cboe.com/api/index/delayed/${encodeURIComponent(symbol)}`,
-            // TradingView scanner API (generic) - may not always work but worth a try
-            `https://scanner.tradingview.com/america/scan`,
-            // Fallback to Yahoo (already used by fetchTickerData) but include for completeness
+            // Yahoo Finance - 最可靠
             `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2d`
+            // 注释掉不可用的源以减少错误日志：
+            // CBOE: 需要认证，会返回 403
+            // TradingView: 需要 API key
         ];
 
         for (let url of candidates) {
@@ -65,21 +63,21 @@ class TradingAssistant {
                 // Try to parse JSON; different providers use different shapes
                 try {
                     const j = JSON.parse(raw);
-                    // CBOE: look for quotes array
-                    if (j && j.quotes && j.quotes.length && j.quotes[0].last) {
-                        return { symbol, price: parseFloat(j.quotes[0].last) };
-                    }
                     // Yahoo chart response
                     if (j && j.chart && j.chart.result && j.chart.result[0]) {
                         const meta = j.chart.result[0].meta;
-                        if (meta && meta.regularMarketPrice != null) return { symbol, price: parseFloat(meta.regularMarketPrice) };
+                        if (meta && meta.regularMarketPrice != null) {
+                            return { symbol, price: parseFloat(meta.regularMarketPrice) };
+                        }
                     }
                 } catch(e) {
                     // Not JSON; skip
                 }
             } catch(e) {
-                // ignore and try next candidate
-                console.warn('fetchExternalMacro candidate failed', url, e.message || e);
+                // 只记录非 403 错误（403 是预期的权限问题）
+                if (!e.message || !e.message.includes('403')) {
+                    console.warn('fetchExternalMacro failed for', symbol, e.message || e);
+                }
             }
         }
         return null;
@@ -544,6 +542,16 @@ class TradingAssistant {
     }
 
     updateData() {
+        // Detect URL change to force symbol reset
+        const currentUrl = window.location.href;
+        if (this.lastUrl && this.lastUrl !== currentUrl) {
+            console.log("🔄 URL Changed, resetting symbol:", this.lastUrl, "→", currentUrl);
+            this.state.symbol = "";
+            this.state.history = [];
+            this.state.lastPrice = 0;
+        }
+        this.lastUrl = currentUrl;
+
         // 1. Get Price & Symbol
         let price = 0;
         let symbol = "";
@@ -553,14 +561,36 @@ class TradingAssistant {
         const shouldScanDom = (now - this.state.lastDomScan) > 1200;
 
         if (shouldScanDom) {
-            // Strategy A: Regex match on title (Flexible)
-            const titleMatch = title.match(/([A-Z]{1,5})[:\s]+([\d,]+\.\d{2})/);
-            if (titleMatch) {
-                symbol = titleMatch[1];
-                price = parseFloat(titleMatch[2].replace(/,/g, ""));
+            // Strategy A: Extract from URL first (most reliable)
+            // IBKR URL pattern: /quote/76792991?source=wl or similar
+            // We'll look for symbol in page header elements
+            const urlMatch = window.location.pathname.match(/\/quote\/(\d+)/);
+            
+            // Strategy B: Look for prominent symbol in page (h1, h2, or large text)
+            if (!symbol) {
+                const headerElements = document.querySelectorAll("h1, h2, h3, .symbol, [class*='symbol'], [class*='ticker']");
+                for (let el of headerElements) {
+                    const text = el.innerText?.trim() || "";
+                    // Match 1-5 letter stock symbols
+                    const match = text.match(/\b([A-Z]{1,5})\b/);
+                    if (match && !["USD", "EUR", "HKD", "CNY", "AVG", "POS", "DAY", "LOW", "HIGH", "VOL", "ASK", "BID", "INC", "CORP", "LTD"].includes(match[1])) {
+                        symbol = match[1];
+                        console.log("✅ Symbol detected from header:", symbol);
+                        break;
+                    }
+                }
             }
 
-            // Strategy B: DOM Heuristic (If title failed or we want to confirm)
+            // Strategy C: Regex match on title (Flexible)
+            if (!symbol) {
+                const titleMatch = title.match(/([A-Z]{1,5})[:\s]+([\d,]+\.\d{2})/);
+                if (titleMatch) {
+                    symbol = titleMatch[1];
+                    price = parseFloat(titleMatch[2].replace(/,/g, ""));
+                }
+            }
+
+            // Strategy D: DOM Heuristic for price (If title failed or we want to confirm)
             if (price === 0) {
                 const candidates = [];
                 const elements = document.querySelectorAll("div, span, h1, h2, h3, strong, b");
@@ -588,16 +618,32 @@ class TradingAssistant {
                             const container = best.element.parentElement?.parentElement; 
                             if (container) {
                                 const txt = container.innerText;
-                                const matches = txt.match(/\b([A-Z]{2,5})\b/g);
+                                const matches = txt.match(/\b([A-Z]{1,5})\b/g);
                                 if (matches) {
-                                    const ignore = ["USD", "EUR", "HKD", "CNY", "AVG", "POS", "DAY", "LOW", "HGH", "VOL", "ASK", "BID"];
+                                    const ignore = ["USD", "EUR", "HKD", "CNY", "AVG", "POS", "DAY", "LOW", "HIGH", "HGH", "VOL", "ASK", "BID", "INC", "CORP", "LTD", "LLC"];
                                     const found = matches.find(m => !ignore.includes(m));
-                                    if (found) symbol = found;
+                                    if (found) {
+                                        symbol = found;
+                                        console.log("✅ Symbol detected near price:", symbol);
+                                    }
                                 }
                             }
                          } catch(e) {}
                     }
                 }
+            }
+
+            // Strategy E: Fallback - scan page for any prominent stock symbol pattern
+            if (!symbol) {
+                try {
+                    const bodyText = document.body.innerText;
+                    // Look for pattern like "ENTG" followed by company name
+                    const symbolMatch = bodyText.match(/\b([A-Z]{2,5})\s+[A-Z][a-z]+\s+(?:Inc|Corp|Ltd|LLC|Company)/);
+                    if (symbolMatch) {
+                        symbol = symbolMatch[1];
+                        console.log("✅ Symbol detected from company pattern:", symbol);
+                    }
+                } catch(e) {}
             }
 
             this.state.lastDomScan = now;
@@ -717,6 +763,15 @@ class TradingAssistant {
         // Session badge (PRE / REG / POST)
         const sessionBadge = document.getElementById("assist-session");
         const session = this.deriveSession(symbol);
+        
+        // Debug log (only log occasionally to avoid spam)
+        if (Math.random() < 0.05) { // 5% chance to log
+            const now = new Date();
+            const estTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+            const cache = this.remoteQuoteCache[symbol];
+            console.log(`📊 Session Debug: ${symbol} = ${session} | EST: ${estTime.toLocaleTimeString()} | API state: ${cache?.marketState || 'N/A'} (${cache ? Math.floor((now.getTime() - cache.ts)/1000) : '?'}s old)`);
+        }
+        
         if (sessionBadge) {
             sessionBadge.innerText = session;
             if (session === "PRE") {
@@ -920,36 +975,52 @@ class TradingAssistant {
     // Derive session considering remote marketState and US market hours (fallback)
     deriveSession(symbol) {
         const now = new Date();
+        
+        // 更准确的 EST/EDT 时区转换
         const estTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-        const day = estTime.getDay(); // 0=Sun
+        const day = estTime.getDay(); // 0=Sun, 6=Sat
         const hh = estTime.getHours();
         const mm = estTime.getMinutes();
-        const minutes = hh * 60 + mm;
+        const totalMinutes = hh * 60 + mm;
 
-        // Hard gate for weekend
+        // 硬判定：周末
         const isWeekend = (day === 0 || day === 6);
-
+        
+        // 优先使用 Yahoo API 返回的实时市场状态（如果有且新鲜）
         const info = symbol ? this.remoteQuoteCache[symbol] : null;
-        if (info && info.marketState) {
+        if (info && info.marketState && (now.getTime() - info.ts) < 30000) { // 30秒内的数据才信任
             const ms = info.marketState.toUpperCase();
-            if (ms.includes("CLOSED")) return "CLOSED";
-            if (ms.includes("PRE")) return "PRE";
-            if (ms.includes("POST")) return "POST";
-            if (ms.includes("REG")) {
-                // If API says REG but本地判定在周末/收盘后，则降级为 CLOSED
-                if (isWeekend || minutes < 9 * 60 + 30 || minutes >= 16 * 60) {
-                    return "CLOSED";
-                }
+            
+            // 完全信任 API 返回的状态
+            if (ms === "CLOSED") return "CLOSED";
+            if (ms === "PRE" || ms.includes("PREPRE") || ms.includes("PREMARKET")) return "PRE";
+            if (ms === "POST" || ms.includes("POSTPOST") || ms.includes("AFTERHOURS")) return "POST";
+            if (ms === "REGULAR" || ms === "REG") {
+                // API 说 REGULAR，但如果时间不对就降级
+                if (isWeekend) return "CLOSED";
+                if (totalMinutes < 9 * 60 + 30 || totalMinutes >= 16 * 60) return "CLOSED";
                 return "REG";
             }
         }
 
-        // Time-based fallback using US Eastern
+        // Fallback：基于美东时间的本地判定
         if (isWeekend) return "CLOSED";
-        if (minutes >= 16 * 60 && minutes < 20 * 60) return "POST"; // 16:00-20:00
-        if (minutes >= 9 * 60 + 30 && minutes < 16 * 60) return "REG"; // 9:30-16:00
-        if (minutes >= 4 * 60 && minutes < 9 * 60 + 30) return "PRE"; // 4:00-9:30
-        return "CLOSED";
+        
+        // 美股交易时间（美东时间）：
+        // PRE: 04:00 - 09:30
+        // REG: 09:30 - 16:00
+        // POST: 16:00 - 20:00
+        // CLOSED: 20:00 - 04:00 (次日)
+        
+        if (totalMinutes >= 4 * 60 && totalMinutes < 9 * 60 + 30) {
+            return "PRE";
+        } else if (totalMinutes >= 9 * 60 + 30 && totalMinutes < 16 * 60) {
+            return "REG";
+        } else if (totalMinutes >= 16 * 60 && totalMinutes < 20 * 60) {
+            return "POST";
+        } else {
+            return "CLOSED";
+        }
     }
 
     async triggerAIAnalysis(autoTriggerReason = null) {
@@ -1049,7 +1120,7 @@ class TradingAssistant {
             const buildOAIBody = (model) => ({
                 model,
                 messages: [
-                    { role: "system", content: "You are a Hedge Fund Manager. Return ONLY valid JSON." },
+                    { role: "system", content: "你是一位资深对冲基金经理。请用中文回答，并只返回有效的 JSON 格式。You are a Hedge Fund Manager. Reply in Chinese and return ONLY valid JSON." },
                     { role: "user", content: prompt }
                 ],
                 temperature: 0.4,
@@ -1098,7 +1169,7 @@ class TradingAssistant {
                             body: JSON.stringify({
                                 model: "deepseek-chat",
                                 messages: [
-                                    {"role": "system", "content": "You are a Hedge Fund Manager. Return ONLY valid JSON."},
+                                    {"role": "system", "content": "你是一位资深对冲基金经理。请用中文回答，并只返回有效的 JSON 格式。"},
                                     {"role": "user", "content": prompt}
                                 ],
                                 temperature: 0.4,
@@ -1134,7 +1205,7 @@ class TradingAssistant {
                     const resp = await runViaBackground(url, headers, {
                         model: userModel,
                         messages: [
-                            { role: "system", content: "You are a Hedge Fund Manager. Return ONLY valid JSON." },
+                            { role: "system", content: "你是一位资深对冲基金经理。请用中文回答，并只返回有效的 JSON 格式。" },
                             { role: "user", content: prompt }
                         ],
                         temperature: 0.4,
@@ -1553,20 +1624,20 @@ class TradingAssistant {
         const prompt = `用户针对 ${ctx.symbol} (当前价格: $${ctx.price}) 的追问：
 "${question}"
 
-请简洁回答（100字以内），基于之前的分析给出专业意见。`;
+请用中文简洁回答（100字以内），基于之前的分析给出专业意见。`;
 
         const deepseekKey = this.apiKeys.deepseekKey;
         if (!this.keyFilled(deepseekKey)) {
             throw new Error("DeepSeek API Key 未配置");
         }
 
-        const url = AI_CONFIG.DEEPSEEK_URL;
+        const url = AI_CONFIG.API_URL;
         const headers = {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${deepseekKey}`
         };
         const body = {
-            model: AI_CONFIG.DEEPSEEK_MODEL || "deepseek-chat",
+            model: AI_CONFIG.MODEL || "deepseek-chat",
             messages: [{ role: "user", content: prompt }],
             max_tokens: 200,
             temperature: 0.7
