@@ -1684,15 +1684,47 @@ class TradingAssistant {
 
     async askFollowUpQuestion(question) {
         // Use the primary AI (DeepSeek by default)
-        const ctx = {
+        const ctx = this.currentMarketContext || {
             symbol: this.state.symbol,
-            price: this.state.price
+            price: this.state.price,
+            change: 0,
+            volatility: "N/A",
+            position: null,
+            pnlPercentage: 0,
+            session: "REG"
         };
         
-        const prompt = `用户针对 ${ctx.symbol} (当前价格: $${ctx.price}) 的追问：
+        // 构建完整上下文（避免 AI 幻觉）
+        const rsi = document.getElementById("assist-rsi")?.innerText || "--";
+        const macd = document.getElementById("assist-macd")?.innerText || "--";
+        const atr = document.getElementById("assist-atr")?.innerText || "--";
+        
+        const prompt = `【实时市场数据】
+标的: ${ctx.symbol}
+当前价格: $${ctx.price}
+价格变动: ${ctx.change > 0 ? '+' : ''}${ctx.change.toFixed(2)}
+波动率: ${ctx.volatility}
+市场状态: ${ctx.session}
+
+【技术指标】
+RSI(14): ${rsi}
+MACD: ${macd}
+ATR(14): ${atr}
+
+【用户持仓】
+${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avgPrice}，当前浮动盈亏 ${ctx.pnlPercentage.toFixed(2)}%` : '无持仓'}
+
+【用户追问】
 "${question}"
 
-请用中文简洁回答（100字以内），基于之前的分析给出专业意见。`;
+【回答要求】
+1. **基于上述真实数据回答**，不要凭空猜测或编造信息
+2. 如果用户提到的价格（如137.42）与当前价格不同，说明是历史入场价
+3. 给出具体操作建议：持有/加仓/减仓/止损，并说明理由
+4. 考虑技术指标信号（RSI超买超卖、MACD多空）
+5. 用中文简洁回答，100-150字
+
+**禁止编造**：不要说股票退市、停牌等未经确认的信息！`;
 
         const deepseekKey = this.apiKeys.deepseekKey;
         if (!this.keyFilled(deepseekKey)) {
@@ -1706,9 +1738,18 @@ class TradingAssistant {
         };
         const body = {
             model: AI_CONFIG.MODEL || "deepseek-chat",
-            messages: [{ role: "user", content: prompt }],
-            max_tokens: 200,
-            temperature: 0.7
+            messages: [
+                { 
+                    role: "system", 
+                    content: "你是专业交易顾问。你必须严格基于提供的实时数据回答，不能编造信息。如果数据不足，明确说明'数据不足'而非猜测。用中文回答。" 
+                },
+                { 
+                    role: "user", 
+                    content: prompt 
+                }
+            ],
+            max_tokens: 300,
+            temperature: 0.5
         };
 
         // Use chrome.runtime.sendMessage to call background script
