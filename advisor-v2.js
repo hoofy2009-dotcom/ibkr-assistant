@@ -126,6 +126,75 @@ class TradingAdvisorV2 {
         document.getElementById("v2-save-settings").onclick = () => this.saveSettings();
         document.querySelector(".v2-modal-close").onclick = () => this.toggleSettings();
         document.getElementById("v2-view-journal").onclick = () => this.showJournalModal();
+        
+        // 添加拖动功能
+        this.makePanelDraggable();
+    }
+
+    makePanelDraggable() {
+        const header = this.panel.querySelector(".ibkr-v2-header");
+        let isDragging = false;
+        let currentX;
+        let currentY;
+        let initialX;
+        let initialY;
+        let xOffset = 0;
+        let yOffset = 0;
+
+        // 从 storage 加载保存的位置
+        chrome.storage.local.get(["assist_v2_panel_position"], (result) => {
+            if (result.assist_v2_panel_position) {
+                const { x, y } = result.assist_v2_panel_position;
+                this.panel.style.left = x + "px";
+                this.panel.style.top = y + "px";
+                this.panel.style.right = "auto"; // 禁用默认的 right 定位
+                xOffset = x;
+                yOffset = y;
+            }
+        });
+
+        header.style.cursor = "move";
+        header.style.userSelect = "none";
+
+        header.addEventListener("mousedown", (e) => {
+            // 不拖动按钮点击
+            if (e.target.classList.contains("ibkr-v2-close")) return;
+            
+            initialX = e.clientX - xOffset;
+            initialY = e.clientY - yOffset;
+            isDragging = true;
+        });
+
+        document.addEventListener("mousemove", (e) => {
+            if (isDragging) {
+                e.preventDefault();
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+
+                // 限制在视口内
+                const maxX = window.innerWidth - this.panel.offsetWidth;
+                const maxY = window.innerHeight - this.panel.offsetHeight;
+                currentX = Math.max(0, Math.min(currentX, maxX));
+                currentY = Math.max(0, Math.min(currentY, maxY));
+
+                xOffset = currentX;
+                yOffset = currentY;
+
+                this.panel.style.left = currentX + "px";
+                this.panel.style.top = currentY + "px";
+                this.panel.style.right = "auto"; // 禁用默认的 right 定位
+            }
+        });
+
+        document.addEventListener("mouseup", () => {
+            if (isDragging) {
+                isDragging = false;
+                // 保存位置
+                chrome.storage.local.set({
+                    assist_v2_panel_position: { x: xOffset, y: yOffset }
+                });
+            }
+        });
     }
 
     toggleSettings() {

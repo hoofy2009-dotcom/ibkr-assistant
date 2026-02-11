@@ -233,25 +233,25 @@ class TradingAssistant {
                 <!-- 技术指标 -->
                 <div class="tech-indicators" style="margin-top:8px; padding-top:8px; border-top:1px dashed #333;">
                     <div class="data-row">
-                        <span class="label">RSI(14)</span>
+                        <span class="label" style="cursor:help;" title="相对强弱指标 (Relative Strength Index)&#10;范围: 0-100&#10;• RSI < 30: 超卖区，可能反弹&#10;• RSI > 70: 超买区，可能回调&#10;• RSI 30-70: 中性区域">RSI(14) ℹ️</span>
                         <span class="value">
                             <span id="assist-rsi">--</span>
                             <span id="assist-rsi-signal" style="margin-left:5px; font-size:9px;"></span>
                         </span>
                     </div>
                     <div class="data-row">
-                        <span class="label">MACD</span>
+                        <span class="label" style="cursor:help;" title="指数平滑异同移动平均线&#10;(Moving Average Convergence Divergence)&#10;• MACD > 0: 多头趋势&#10;• MACD < 0: 空头趋势&#10;• 金叉: MACD从负转正，看涨信号&#10;• 死叉: MACD从正转负，看跌信号">MACD ℹ️</span>
                         <span class="value">
                             <span id="assist-macd">--</span>
                             <span id="assist-macd-signal" style="margin-left:5px; font-size:9px;"></span>
                         </span>
                     </div>
                     <div class="data-row">
-                        <span class="label">ATR(14)</span>
+                        <span class="label" style="cursor:help;" title="平均真实波幅 (Average True Range)&#10;衡量价格波动性&#10;• 数值越大 = 波动越剧烈&#10;• 用于计算动态止损位">ATR(14) ℹ️</span>
                         <span class="value" id="assist-atr">--</span>
                     </div>
                     <div class="data-row">
-                        <span class="label">动态止损</span>
+                        <span class="label" style="cursor:help;" title="动态止损位 = 当前价 - (ATR × 2)&#10;根据波动性自动调整&#10;避免被正常波动扫损">动态止损 ℹ️</span>
                         <span class="value" id="assist-stop" style="color:#f44336;">--</span>
                     </div>
                 </div>
@@ -260,20 +260,20 @@ class TradingAssistant {
                 <div class="dayt-indicators" style="margin-top:8px; padding-top:8px; border-top:1px dashed #333;">
                     <div style="font-size:10px; color:#64b5f6; margin-bottom:5px; font-weight:bold;">📊 日内做T参考</div>
                     <div class="data-row">
-                        <span class="label">日内区间</span>
+                        <span class="label" style="cursor:help;" title="日内区间 = (当日最高价 - 当日最低价) / 最低价&#10;反映当天的波动幅度&#10;• 区间 > 3%: 波动大，适合做T&#10;• 区间 < 1.5%: 窄幅震荡，谨慎操作">日内区间 ℹ️</span>
                         <span class="value" style="font-size:10px;">
                             <span id="assist-intraday-range">--</span>
                         </span>
                     </div>
                     <div class="data-row">
-                        <span class="label">区间位置</span>
+                        <span class="label" style="cursor:help;" title="区间位置 = (当前价 - 最低价) / (最高价 - 最低价)&#10;显示当前价在日内区间的百分比位置&#10;• 0-25%: 区间底部，低吸机会&#10;• 75-100%: 区间顶部，高抛时机&#10;• 40-60%: 中间位置，观望为主">区间位置 ℹ️</span>
                         <span class="value">
                             <span id="assist-range-position">--</span>
                             <span id="assist-range-signal" style="margin-left:5px; font-size:9px;"></span>
                         </span>
                     </div>
                     <div class="data-row">
-                        <span class="label">做T信号</span>
+                        <span class="label" style="cursor:help;" title="做T信号综合判断:&#10;📉高抛: 位置>75% + RSI>60 (价格高位+超买)&#10;📥低吸: 位置<25% + RSI<40 (价格低位+超卖)&#10;🔒窄幅: 区间<1.5% (波动太小不适合做T)&#10;⚖️观望: 其他情况(等待更好时机)">做T信号 ℹ️</span>
                         <span class="value" id="assist-dayt-signal" style="font-weight:bold;">--</span>
                     </div>
                 </div>
@@ -864,80 +864,106 @@ class TradingAssistant {
         // 技术指标计算
         if (this.state.history.length >= 14) {
             const rsi = this.calculateRSI(this.state.history, 14);
-            document.getElementById("assist-rsi").innerText = rsi.toFixed(2);
+            const rsiEl = document.getElementById("assist-rsi");
+            if (rsiEl) rsiEl.innerText = rsi.toFixed(2);
             
             const rsiSignal = document.getElementById("assist-rsi-signal");
-            if (rsi < 30) {
-                rsiSignal.innerText = "超卖";
-                rsiSignal.style.color = "#4caf50";
-            } else if (rsi > 70) {
-                rsiSignal.innerText = "超买";
-                rsiSignal.style.color = "#f44336";
-            } else {
-                rsiSignal.innerText = "中性";
-                rsiSignal.style.color = "#999";
+            if (rsiSignal) {
+                if (rsi < 30) {
+                    rsiSignal.innerText = "超卖";
+                    rsiSignal.style.color = "#4caf50";
+                } else if (rsi > 70) {
+                    rsiSignal.innerText = "超买";
+                    rsiSignal.style.color = "#f44336";
+                } else {
+                    rsiSignal.innerText = "中性";
+                    rsiSignal.style.color = "#999";
+                }
             }
+        } else {
+            // 显示数据积累进度
+            const rsiEl = document.getElementById("assist-rsi");
+            if (rsiEl) rsiEl.innerText = `积累中 ${this.state.history.length}/14`;
         }
 
         if (this.state.history.length >= 26) {
             const macd = this.calculateMACD(this.state.history);
-            document.getElementById("assist-macd").innerText = macd.histogram.toFixed(3);
+            const macdEl = document.getElementById("assist-macd");
+            if (macdEl) macdEl.innerText = macd.histogram.toFixed(3);
             
             const macdSignal = document.getElementById("assist-macd-signal");
-            if (macd.histogram > 0 && macd.prev < 0) {
-                macdSignal.innerText = "金叉";
-                macdSignal.style.color = "#4caf50";
-            } else if (macd.histogram < 0 && macd.prev > 0) {
-                macdSignal.innerText = "死叉";
-                macdSignal.style.color = "#f44336";
-            } else {
-                macdSignal.innerText = macd.histogram > 0 ? "多头" : "空头";
-                macdSignal.style.color = "#999";
+            if (macdSignal) {
+                if (macd.histogram > 0 && macd.prev < 0) {
+                    macdSignal.innerText = "金叉";
+                    macdSignal.style.color = "#4caf50";
+                } else if (macd.histogram < 0 && macd.prev > 0) {
+                    macdSignal.innerText = "死叉";
+                    macdSignal.style.color = "#f44336";
+                } else {
+                    macdSignal.innerText = macd.histogram > 0 ? "多头" : "空头";
+                    macdSignal.style.color = "#999";
+                }
             }
 
             // ATR 和动态止损
             const atr = this.calculateATR(this.state.history, 14);
-            document.getElementById("assist-atr").innerText = atr.toFixed(2);
+            const atrEl = document.getElementById("assist-atr");
+            if (atrEl) atrEl.innerText = atr.toFixed(2);
             
-            const stopLoss = price - (atr * 2);
-            document.getElementById("assist-stop").innerText = stopLoss.toFixed(2);
+            const stopEl = document.getElementById("assist-stop");
+            if (stopEl) {
+                const stopLoss = price - (atr * 2);
+                stopEl.innerText = stopLoss.toFixed(2);
+            }
+        } else {
+            // 显示数据积累进度
+            const macdEl = document.getElementById("assist-macd");
+            if (macdEl) macdEl.innerText = `积累中 ${this.state.history.length}/26`;
+            const atrEl = document.getElementById("assist-atr");
+            if (atrEl) atrEl.innerText = `积累中 ${this.state.history.length}/26`;
         }
 
         // === 做T专用指标计算 ===
-        if (this.state.sessionHigh > 0 && this.state.sessionLow > 0 && this.state.sessionLow < this.state.sessionHigh) {
+        if (this.state.sessionHigh > -Infinity && this.state.sessionLow < Infinity && this.state.sessionLow < this.state.sessionHigh) {
             // 1. 日内区间
             const range = this.state.sessionHigh - this.state.sessionLow;
             const rangePercent = (range / this.state.sessionLow) * 100;
-            document.getElementById("assist-intraday-range").innerText = 
-                `${this.state.sessionLow.toFixed(2)}-${this.state.sessionHigh.toFixed(2)} (${rangePercent.toFixed(2)}%)`;
+            const rangeEl = document.getElementById("assist-intraday-range");
+            if (rangeEl) {
+                rangeEl.innerText = `${this.state.sessionLow.toFixed(2)}-${this.state.sessionHigh.toFixed(2)} (${rangePercent.toFixed(2)}%)`;
+            }
 
             // 2. 当前价格在区间中的位置 (0-100%)
             const positionInRange = ((price - this.state.sessionLow) / range) * 100;
-            document.getElementById("assist-range-position").innerText = positionInRange.toFixed(0) + "%";
+            const posEl = document.getElementById("assist-range-position");
+            if (posEl) posEl.innerText = positionInRange.toFixed(0) + "%";
             
             const rangeSignalEl = document.getElementById("assist-range-signal");
-            if (positionInRange >= 80) {
-                rangeSignalEl.innerText = "高位";
-                rangeSignalEl.style.color = "#f44336";
-            } else if (positionInRange >= 60) {
-                rangeSignalEl.innerText = "偏高";
-                rangeSignalEl.style.color = "#ff9800";
-            } else if (positionInRange <= 20) {
-                rangeSignalEl.innerText = "低位";
-                rangeSignalEl.style.color = "#4caf50";
-            } else if (positionInRange <= 40) {
-                rangeSignalEl.innerText = "偏低";
-                rangeSignalEl.style.color = "#66bb6a";
-            } else {
-                rangeSignalEl.innerText = "中位";
-                rangeSignalEl.style.color = "#9e9e9e";
+            if (rangeSignalEl) {
+                if (positionInRange >= 80) {
+                    rangeSignalEl.innerText = "高位";
+                    rangeSignalEl.style.color = "#f44336";
+                } else if (positionInRange >= 60) {
+                    rangeSignalEl.innerText = "偏高";
+                    rangeSignalEl.style.color = "#ff9800";
+                } else if (positionInRange <= 20) {
+                    rangeSignalEl.innerText = "低位";
+                    rangeSignalEl.style.color = "#4caf50";
+                } else if (positionInRange <= 40) {
+                    rangeSignalEl.innerText = "偏低";
+                    rangeSignalEl.style.color = "#66bb6a";
+                } else {
+                    rangeSignalEl.innerText = "中位";
+                    rangeSignalEl.style.color = "#9e9e9e";
+                }
             }
 
             // 3. 综合做T信号（结合位置 + RSI + 波动率）
             const rsi = this.state.history.length >= 14 ? this.calculateRSI(this.state.history, 14) : 50;
-            const vol = parseFloat(document.getElementById("assist-vol").innerText) || 0;
+            const volEl = document.getElementById("assist-vol");
+            const vol = volEl ? parseFloat(volEl.innerText) || 0 : 0;
             
-            let daytSignal = "观望";
+            let daytSignal = "⚖️观望";
             let daytColor = "#9e9e9e";
             
             // 判断是否有做T空间（区间至少 1.5%）
@@ -973,8 +999,21 @@ class TradingAssistant {
             }
             
             const daytSignalEl = document.getElementById("assist-dayt-signal");
-            daytSignalEl.innerText = daytSignal;
-            daytSignalEl.style.color = daytColor;
+            if (daytSignalEl) {
+                daytSignalEl.innerText = daytSignal;
+                daytSignalEl.style.color = daytColor;
+            }
+        } else {
+            // 数据还在积累中
+            const rangeEl = document.getElementById("assist-intraday-range");
+            if (rangeEl) rangeEl.innerText = "监控中...";
+            const posEl = document.getElementById("assist-range-position");
+            if (posEl) posEl.innerText = "监控中...";
+            const signalEl = document.getElementById("assist-dayt-signal");
+            if (signalEl) {
+                signalEl.innerText = "⏳监控中";
+                signalEl.style.color = "#999";
+            }
         }
 
         // Position UI
