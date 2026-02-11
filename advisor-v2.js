@@ -1,0 +1,651 @@
+// IBKR Trading Assistant V2 - Advanced Professional Edition
+// 独立于 V1，提供更专业的交易分析功能
+
+console.log("🚀 IBKR Assistant V2: Script loaded!");
+
+class TradingAdvisorV2 {
+    constructor() {
+        this.panel = null;
+        this.state = {
+            symbol: "",
+            price: 0,
+            history: [], // 价格历史（最多 100 条）
+            volume: [],
+            trades: [], // 交易日志
+            lastUrl: ""
+        };
+        
+        this.apiKeys = {};
+        this.settings = {
+            newsApiKey: "",
+            finnhubApiKey: ""
+        };
+        
+        this.init();
+    }
+
+    async init() {
+        console.log("📊 IBKR Assistant V2 Initializing...");
+        await this.loadSettings();
+        this.createPanel();
+        this.startMonitoring();
+        this.loadTradeJournal();
+    }
+
+    async loadSettings() {
+        return new Promise((resolve) => {
+            chrome.storage.local.get(["assist_v2_settings", "assist_v2_keys", "assist_v2_trades"], (result) => {
+                this.settings = result.assist_v2_settings || this.settings;
+                this.apiKeys = result.assist_v2_keys || {};
+                this.state.trades = result.assist_v2_trades || [];
+                resolve();
+            });
+        });
+    }
+
+    createPanel() {
+        this.panel = document.createElement("div");
+        this.panel.className = "ibkr-assistant-v2-panel";
+        this.panel.innerHTML = `
+            <div class="ibkr-v2-header">
+                <span class="ibkr-v2-title">🚀 智能顾问 V2 (Pro)</span>
+                <button class="ibkr-v2-close">✕</button>
+            </div>
+            
+            <div class="ibkr-v2-content">
+                <!-- 基础信息 -->
+                <div class="v2-section">
+                    <div class="v2-info-row">
+                        <span class="v2-label">标的</span>
+                        <span class="v2-value" id="v2-symbol">检测中...</span>
+                    </div>
+                    <div class="v2-info-row">
+                        <span class="v2-label">价格</span>
+                        <span class="v2-value" id="v2-price">--</span>
+                    </div>
+                </div>
+
+                <!-- 技术指标 -->
+                <div class="v2-section">
+                    <div class="v2-section-title">📈 技术指标</div>
+                    <div class="v2-indicators">
+                        <div class="v2-indicator">
+                            <span class="v2-ind-label">RSI(14)</span>
+                            <span class="v2-ind-value" id="v2-rsi">--</span>
+                            <span class="v2-ind-signal" id="v2-rsi-signal"></span>
+                        </div>
+                        <div class="v2-indicator">
+                            <span class="v2-ind-label">MACD</span>
+                            <span class="v2-ind-value" id="v2-macd">--</span>
+                            <span class="v2-ind-signal" id="v2-macd-signal"></span>
+                        </div>
+                        <div class="v2-indicator">
+                            <span class="v2-ind-label">ATR(14)</span>
+                            <span class="v2-ind-value" id="v2-atr">--</span>
+                        </div>
+                        <div class="v2-indicator">
+                            <span class="v2-ind-label">动态止损</span>
+                            <span class="v2-ind-value" id="v2-stop">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 实时新闻 -->
+                <div class="v2-section">
+                    <div class="v2-section-title">📰 实时新闻 (Finnhub)</div>
+                    <div id="v2-news" class="v2-news-list">配置 API Key 以启用...</div>
+                </div>
+
+                <!-- 财报日历 -->
+                <div class="v2-section">
+                    <div class="v2-section-title">📅 财报日历</div>
+                    <div id="v2-earnings" class="v2-earnings-box">加载中...</div>
+                </div>
+
+                <!-- AI 分析 V2 -->
+                <div class="v2-section">
+                    <div class="v2-section-title">🤖 AI 深度分析</div>
+                    <button id="v2-analyze" class="v2-btn-analyze">开始分析</button>
+                    <div id="v2-analysis" class="v2-analysis-box">等待分析...</div>
+                </div>
+
+                <!-- 交易日志 -->
+                <div class="v2-section">
+                    <div class="v2-section-title">📊 交易日志 & 业绩</div>
+                    <div id="v2-journal" class="v2-journal-box">
+                        <div class="v2-stats">
+                            <span>总交易: <b id="v2-total-trades">0</b></span>
+                            <span>胜率: <b id="v2-win-rate">--%</b></span>
+                            <span>总盈亏: <b id="v2-total-pnl">$0</b></span>
+                        </div>
+                        <button id="v2-view-journal" class="v2-btn-sm">查看详情</button>
+                    </div>
+                </div>
+
+                <!-- 设置按钮 -->
+                <button id="v2-settings" class="v2-btn-settings">⚙️ V2 设置</button>
+            </div>
+
+            <!-- 设置模态框 -->
+            <div id="v2-settings-modal" class="v2-modal" style="display:none;">
+                <div class="v2-modal-content">
+                    <div class="v2-modal-header">
+                        <span>V2 设置</span>
+                        <button class="v2-modal-close">✕</button>
+                    </div>
+                    <div class="v2-modal-body">
+                        <div class="v2-setting-item">
+                            <label>Finnhub API Key (新闻+财报)</label>
+                            <input type="password" id="v2-finnhub-key" placeholder="免费获取: finnhub.io">
+                        </div>
+                        <div class="v2-setting-item">
+                            <label>NewsAPI Key (备用新闻源)</label>
+                            <input type="password" id="v2-newsapi-key" placeholder="免费获取: newsapi.org">
+                        </div>
+                        <div class="v2-setting-hint">
+                            提示：Finnhub 提供免费 tier (60 calls/min)<br>
+                            NewsAPI 提供免费 tier (100 calls/day)
+                        </div>
+                        <button id="v2-save-settings" class="v2-btn-save">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(this.panel);
+        this.attachEventListeners();
+    }
+
+    attachEventListeners() {
+        document.querySelector(".ibkr-v2-close").onclick = () => this.panel.remove();
+        document.getElementById("v2-analyze").onclick = () => this.runAdvancedAnalysis();
+        document.getElementById("v2-settings").onclick = () => this.toggleSettings();
+        document.getElementById("v2-save-settings").onclick = () => this.saveSettings();
+        document.querySelector(".v2-modal-close").onclick = () => this.toggleSettings();
+        document.getElementById("v2-view-journal").onclick = () => this.showJournalModal();
+    }
+
+    toggleSettings() {
+        const modal = document.getElementById("v2-settings-modal");
+        if (modal.style.display === "none") {
+            modal.style.display = "flex";
+            document.getElementById("v2-finnhub-key").value = this.settings.finnhubApiKey || "";
+            document.getElementById("v2-newsapi-key").value = this.settings.newsApiKey || "";
+        } else {
+            modal.style.display = "none";
+        }
+    }
+
+    saveSettings() {
+        this.settings.finnhubApiKey = document.getElementById("v2-finnhub-key").value.trim();
+        this.settings.newsApiKey = document.getElementById("v2-newsapi-key").value.trim();
+        
+        chrome.storage.local.set({ 
+            assist_v2_settings: this.settings,
+            assist_v2_keys: this.apiKeys 
+        }, () => {
+            this.toggleSettings();
+            this.showToast("✅ V2 设置已保存", "success");
+            // 重新加载新闻和财报
+            if (this.state.symbol) {
+                this.fetchNews(this.state.symbol);
+                this.fetchEarnings(this.state.symbol);
+            }
+        });
+    }
+
+    startMonitoring() {
+        setInterval(() => {
+            this.updateData();
+        }, 1000);
+    }
+
+    updateData() {
+        // 检测 URL 变化
+        const currentUrl = window.location.href;
+        if (this.state.lastUrl !== currentUrl) {
+            this.state.lastUrl = currentUrl;
+            this.state.symbol = "";
+            this.state.history = [];
+        }
+
+        // 检测股票代码和价格（复用 V1 的检测逻辑）
+        const title = document.title;
+        let symbol = "";
+        let price = 0;
+
+        // 从标题或页面提取
+        const headerElements = document.querySelectorAll("h1, h2, h3");
+        for (let el of headerElements) {
+            const text = el.innerText?.trim() || "";
+            const match = text.match(/\b([A-Z]{1,5})\b/);
+            if (match && !["USD", "EUR", "INC", "CORP"].includes(match[1])) {
+                symbol = match[1];
+                break;
+            }
+        }
+
+        // 检测价格
+        const elements = document.querySelectorAll("div, span, h1, h2, h3, strong, b");
+        const candidates = [];
+        elements.forEach(el => {
+            if (el.children.length > 1) return;
+            const text = el.innerText ? el.innerText.trim().replace(/,/g, "") : "";
+            if (/^\d+\.\d{2}$/.test(text)) {
+                const val = parseFloat(text);
+                if (val > 0) {
+                    const style = window.getComputedStyle(el);
+                    const fontSize = parseFloat(style.fontSize);
+                    if (fontSize > 16) {
+                        candidates.push({ price: val, size: fontSize });
+                    }
+                }
+            }
+        });
+
+        candidates.sort((a, b) => b.size - a.size);
+        if (candidates.length > 0) {
+            price = candidates[0].price;
+        }
+
+        if (!symbol) symbol = "DETECTED";
+        if (price === 0) return;
+
+        // 更新状态
+        if (symbol !== this.state.symbol) {
+            console.log(`V2: Symbol changed to ${symbol}`);
+            this.state.symbol = symbol;
+            this.state.history = [];
+            // 加载新闻和财报
+            if (symbol !== "DETECTED") {
+                this.fetchNews(symbol);
+                this.fetchEarnings(symbol);
+            }
+        }
+
+        this.state.price = price;
+        this.state.history.push(price);
+        if (this.state.history.length > 100) this.state.history.shift();
+
+        this.updateUI();
+    }
+
+    updateUI() {
+        document.getElementById("v2-symbol").innerText = this.state.symbol;
+        document.getElementById("v2-price").innerText = this.state.price.toFixed(2);
+
+        // 计算技术指标（需要足够的历史数据）
+        if (this.state.history.length >= 14) {
+            const rsi = this.calculateRSI(this.state.history, 14);
+            document.getElementById("v2-rsi").innerText = rsi.toFixed(2);
+            
+            const rsiSignal = document.getElementById("v2-rsi-signal");
+            if (rsi < 30) {
+                rsiSignal.innerText = "超卖";
+                rsiSignal.style.color = "#4caf50";
+            } else if (rsi > 70) {
+                rsiSignal.innerText = "超买";
+                rsiSignal.style.color = "#f44336";
+            } else {
+                rsiSignal.innerText = "中性";
+                rsiSignal.style.color = "#aaa";
+            }
+        }
+
+        if (this.state.history.length >= 26) {
+            const macd = this.calculateMACD(this.state.history);
+            document.getElementById("v2-macd").innerText = macd.histogram.toFixed(3);
+            
+            const macdSignal = document.getElementById("v2-macd-signal");
+            if (macd.histogram > 0 && macd.prev < 0) {
+                macdSignal.innerText = "金叉";
+                macdSignal.style.color = "#4caf50";
+            } else if (macd.histogram < 0 && macd.prev > 0) {
+                macdSignal.innerText = "死叉";
+                macdSignal.style.color = "#f44336";
+            } else {
+                macdSignal.innerText = macd.histogram > 0 ? "多头" : "空头";
+                macdSignal.style.color = "#aaa";
+            }
+
+            // ATR 和动态止损
+            const atr = this.calculateATR(this.state.history, 14);
+            document.getElementById("v2-atr").innerText = atr.toFixed(2);
+            
+            const stopLoss = this.state.price - (atr * 2);
+            document.getElementById("v2-stop").innerText = stopLoss.toFixed(2);
+        }
+
+        // 更新交易统计
+        this.updateJournalStats();
+    }
+
+    // === 技术指标计算 ===
+    calculateRSI(prices, period = 14) {
+        if (prices.length < period + 1) return 50;
+        
+        let gains = 0;
+        let losses = 0;
+        
+        for (let i = prices.length - period; i < prices.length; i++) {
+            const change = prices[i] - prices[i - 1];
+            if (change > 0) {
+                gains += change;
+            } else {
+                losses += Math.abs(change);
+            }
+        }
+        
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        
+        if (avgLoss === 0) return 100;
+        const rs = avgGain / avgLoss;
+        return 100 - (100 / (1 + rs));
+    }
+
+    calculateMACD(prices) {
+        if (prices.length < 26) return { macd: 0, signal: 0, histogram: 0, prev: 0 };
+        
+        const ema12 = this.calculateEMA(prices, 12);
+        const ema26 = this.calculateEMA(prices, 26);
+        const macdLine = ema12 - ema26;
+        
+        // 简化版：不计算signal line，直接用 MACD 值
+        return {
+            macd: macdLine,
+            signal: 0,
+            histogram: macdLine,
+            prev: prices.length > 27 ? this.calculateEMA(prices.slice(0, -1), 12) - this.calculateEMA(prices.slice(0, -1), 26) : 0
+        };
+    }
+
+    calculateEMA(prices, period) {
+        const k = 2 / (period + 1);
+        let ema = prices[0];
+        for (let i = 1; i < prices.length; i++) {
+            ema = (prices[i] * k) + (ema * (1 - k));
+        }
+        return ema;
+    }
+
+    calculateATR(prices, period = 14) {
+        if (prices.length < period + 1) return 0;
+        
+        let tr = 0;
+        for (let i = prices.length - period; i < prices.length; i++) {
+            const high = Math.max(prices[i], prices[i - 1]);
+            const low = Math.min(prices[i], prices[i - 1]);
+            tr += (high - low);
+        }
+        
+        return tr / period;
+    }
+
+    // === 新闻获取 (Finnhub) ===
+    async fetchNews(symbol) {
+        const apiKey = this.settings.finnhubApiKey;
+        if (!apiKey) {
+            document.getElementById("v2-news").innerHTML = "请在设置中配置 Finnhub API Key";
+            return;
+        }
+
+        try {
+            const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const to = new Date().toISOString().split('T')[0];
+            const url = `https://finnhub.io/api/v1/company-news?symbol=${symbol}&from=${from}&to=${to}&token=${apiKey}`;
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data && data.length > 0) {
+                const newsHtml = data.slice(0, 5).map(item => `
+                    <div class="v2-news-item">
+                        <div class="v2-news-title">${item.headline}</div>
+                        <div class="v2-news-meta">${new Date(item.datetime * 1000).toLocaleDateString()} | ${item.source}</div>
+                    </div>
+                `).join("");
+                document.getElementById("v2-news").innerHTML = newsHtml;
+            } else {
+                document.getElementById("v2-news").innerHTML = "暂无新闻";
+            }
+        } catch (e) {
+            console.error("Finnhub news error:", e);
+            document.getElementById("v2-news").innerHTML = "新闻加载失败";
+        }
+    }
+
+    // === 财报日历 (Finnhub) ===
+    async fetchEarnings(symbol) {
+        const apiKey = this.settings.finnhubApiKey;
+        if (!apiKey) {
+            document.getElementById("v2-earnings").innerHTML = "请配置 Finnhub API Key";
+            return;
+        }
+
+        try {
+            const url = `https://finnhub.io/api/v1/calendar/earnings?symbol=${symbol}&token=${apiKey}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data && data.earningsCalendar && data.earningsCalendar.length > 0) {
+                const earnings = data.earningsCalendar[0];
+                const html = `
+                    <div class="v2-earnings-item">
+                        <div>📅 日期: <b>${earnings.date || 'TBA'}</b></div>
+                        <div>💰 EPS 预期: <b>${earnings.epsEstimate || 'N/A'}</b></div>
+                        <div>📊 营收预期: <b>${earnings.revenueEstimate || 'N/A'}</b></div>
+                    </div>
+                `;
+                document.getElementById("v2-earnings").innerHTML = html;
+            } else {
+                document.getElementById("v2-earnings").innerHTML = "暂无财报数据";
+            }
+        } catch (e) {
+            console.error("Finnhub earnings error:", e);
+            document.getElementById("v2-earnings").innerHTML = "财报数据加载失败";
+        }
+    }
+
+    // === AI 深度分析 ===
+    async runAdvancedAnalysis() {
+        const btn = document.getElementById("v2-analyze");
+        const box = document.getElementById("v2-analysis");
+        
+        btn.disabled = true;
+        btn.innerText = "分析中...";
+        box.innerText = "正在整合技术指标、新闻、财报进行深度分析...";
+
+        // 收集数据
+        const rsi = parseFloat(document.getElementById("v2-rsi").innerText) || 50;
+        const macd = parseFloat(document.getElementById("v2-macd").innerText) || 0;
+        const atr = parseFloat(document.getElementById("v2-atr").innerText) || 0;
+        
+        // 构建增强提示词
+        const prompt = `
+            作为专业量化分析师，请分析 ${this.state.symbol}：
+            
+            【技术指标】
+            - RSI(14): ${rsi.toFixed(2)} ${rsi < 30 ? '(超卖)' : rsi > 70 ? '(超买)' : ''}
+            - MACD: ${macd.toFixed(3)} ${macd > 0 ? '(多头)' : '(空头)'}
+            - ATR(14): ${atr.toFixed(2)}
+            - 当前价: ${this.state.price}
+            - 动态止损位: ${(this.state.price - atr * 2).toFixed(2)}
+            
+            【要求】
+            1. 综合技术指标给出明确操作建议（BUY/SELL/HOLD）
+            2. 说明止损位和目标位
+            3. 风险评估（1-10分）
+            4. 用中文回答，100字以内
+            
+            返回JSON格式：
+            {
+                "action": "BUY|SELL|HOLD",
+                "confidence": 0.0-1.0,
+                "stopLoss": 数字,
+                "target": 数字,
+                "risk": 1-10,
+                "reason": "简短理由"
+            }
+        `;
+
+        try {
+            // 调用 DeepSeek（复用 V1 的 API keys）
+            const v1Keys = await this.getV1ApiKeys();
+            if (!v1Keys.deepseekKey) {
+                box.innerText = "请先在 V1 设置中配置 DeepSeek API Key";
+                btn.disabled = false;
+                btn.innerText = "开始分析";
+                return;
+            }
+
+            const response = await fetch("https://api.deepseek.com/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${v1Keys.deepseekKey}`
+                },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        { role: "system", content: "你是专业量化分析师，返回有效JSON。" },
+                        { role: "user", content: prompt }
+                    ],
+                    temperature: 0.4,
+                    max_tokens: 300
+                })
+            });
+
+            const data = await response.json();
+            let result = data.choices[0].message.content;
+            result = result.replace(/```json/g, "").replace(/```/g, "").trim();
+            const analysis = JSON.parse(result);
+
+            // 显示结果
+            box.innerHTML = `
+                <div class="v2-analysis-result">
+                    <div class="v2-action" style="color: ${analysis.action === 'BUY' ? '#4caf50' : analysis.action === 'SELL' ? '#f44336' : '#aaa'}">
+                        <b>${analysis.action}</b> (置信度: ${(analysis.confidence * 100).toFixed(0)}%)
+                    </div>
+                    <div class="v2-levels">
+                        <span>止损: <b>${analysis.stopLoss}</b></span>
+                        <span>目标: <b>${analysis.target}</b></span>
+                        <span>风险: <b>${analysis.risk}/10</b></span>
+                    </div>
+                    <div class="v2-reason">${analysis.reason}</div>
+                    <button id="v2-log-trade" class="v2-btn-sm" style="margin-top: 8px;">记录到交易日志</button>
+                </div>
+            `;
+
+            // 添加记录按钮事件
+            document.getElementById("v2-log-trade").onclick = () => {
+                this.logTrade(analysis);
+            };
+
+        } catch (e) {
+            console.error("V2 Analysis error:", e);
+            box.innerText = "分析失败: " + e.message;
+        }
+
+        btn.disabled = false;
+        btn.innerText = "重新分析";
+    }
+
+    async getV1ApiKeys() {
+        return new Promise((resolve) => {
+            chrome.storage.local.get(["assist_keys"], (result) => {
+                resolve(result.assist_keys || {});
+            });
+        });
+    }
+
+    // === 交易日志 ===
+    logTrade(analysis) {
+        const trade = {
+            timestamp: Date.now(),
+            symbol: this.state.symbol,
+            entryPrice: this.state.price,
+            action: analysis.action,
+            stopLoss: analysis.stopLoss,
+            target: analysis.target,
+            risk: analysis.risk,
+            reason: analysis.reason,
+            rsi: parseFloat(document.getElementById("v2-rsi").innerText) || 0,
+            macd: parseFloat(document.getElementById("v2-macd").innerText) || 0,
+            status: "OPEN", // OPEN, CLOSED
+            exitPrice: null,
+            pnl: null
+        };
+
+        this.state.trades.push(trade);
+        this.saveTradeJournal();
+        this.showToast("✅ 已记录到交易日志", "success");
+        this.updateJournalStats();
+    }
+
+    loadTradeJournal() {
+        chrome.storage.local.get(["assist_v2_trades"], (result) => {
+            this.state.trades = result.assist_v2_trades || [];
+            this.updateJournalStats();
+        });
+    }
+
+    saveTradeJournal() {
+        chrome.storage.local.set({ assist_v2_trades: this.state.trades });
+    }
+
+    updateJournalStats() {
+        const total = this.state.trades.length;
+        const closed = this.state.trades.filter(t => t.status === "CLOSED");
+        const wins = closed.filter(t => t.pnl && t.pnl > 0).length;
+        const winRate = closed.length > 0 ? (wins / closed.length * 100) : 0;
+        const totalPnl = closed.reduce((sum, t) => sum + (t.pnl || 0), 0);
+
+        document.getElementById("v2-total-trades").innerText = total;
+        document.getElementById("v2-win-rate").innerText = winRate.toFixed(1) + "%";
+        document.getElementById("v2-total-pnl").innerText = "$" + totalPnl.toFixed(2);
+    }
+
+    showJournalModal() {
+        // TODO: 显示完整交易日志的模态框
+        alert("交易日志详情功能开发中...\n\n当前统计:\n" + 
+              `总交易: ${this.state.trades.length}\n` +
+              `待平仓: ${this.state.trades.filter(t => t.status === 'OPEN').length}`);
+    }
+
+    showToast(msg, type = "info") {
+        const colors = { info: "#90caf9", success: "#66bb6a", error: "#ef5350" };
+        let container = document.getElementById("v2-toast-container");
+        if (!container) {
+            container = document.createElement("div");
+            container.id = "v2-toast-container";
+            container.style.cssText = "position:fixed;bottom:80px;right:20px;z-index:99999;";
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement("div");
+        toast.innerText = msg;
+        toast.style.cssText = `background:#1e1e1e;border:1px solid ${colors[type]};color:${colors[type]};padding:8px 10px;border-radius:4px;font-size:12px;margin-top:6px;`;
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.opacity = "0";
+            toast.style.transition = "opacity 0.3s";
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
+}
+
+// 启动 V2
+const startV2Assistant = () => {
+    if (!document.querySelector('.ibkr-assistant-v2-panel')) {
+        console.log("✅ Starting IBKR Assistant V2...");
+        new TradingAdvisorV2();
+    }
+};
+
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', startV2Assistant);
+} else {
+    startV2Assistant();
+}

@@ -18,3 +18,7 @@ temp/
 # Sensitive data (just in case user adds real keys later)
 config.local.js
 secrets.js
+
+# Node modules (V2)
+node_modules/
+package-lock.json

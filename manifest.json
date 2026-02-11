@@ -1,8 +1,8 @@
 ﻿{
   "manifest_version": 3,
   "name": "IBKR Trading Assistant",
-  "version": "1.0",
-  "description": "Real-time trading strategy assistant for IBKR Portal",
+  "version": "2.0",
+  "description": "Real-time trading strategy assistant for IBKR Portal with V2 Advanced Features",
   "background": {
     "service_worker": "background.js"
   },
@@ -35,7 +35,9 @@
     "https://api.x.ai/*",
     "https://openrouter.ai/*",
     "https://cdn.cboe.com/*",
-    "https://scanner.tradingview.com/*"
+    "https://scanner.tradingview.com/*",
+    "https://finnhub.io/*",
+    "https://newsapi.org/*"
   ],
   "content_scripts": [
     {
@@ -55,8 +57,8 @@
         "*://ibkr.com/*",
         "*://*.ibkr.com/*"
       ],
-      "js": ["config.js", "content.js"],
-      "css": ["styles.css"]
+      "js": ["config.js", "content.js", "advisor-v2.js"],
+      "css": ["styles.css", "styles-v2.css"]
     }
   ]
 }

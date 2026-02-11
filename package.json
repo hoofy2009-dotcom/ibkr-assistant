@@ -1,0 +1,24 @@
+{
+  "name": "ibkr-assistant-main",
+  "version": "1.0.0",
+  "description": "这是一个简单的 Chrome/Edge 浏览器扩展，用于在 Interactive Brokers (IBKR) 网页版上方显示实时交易策略助手。",
+  "main": "background.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hoofy2009-dotcom/ibkr-assistant.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/hoofy2009-dotcom/ibkr-assistant/issues"
+  },
+  "homepage": "https://github.com/hoofy2009-dotcom/ibkr-assistant#readme",
+  "dependencies": {
+    "technicalindicators": "^3.1.0"
+  }
+}
