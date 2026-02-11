@@ -255,6 +255,28 @@ class TradingAssistant {
                         <span class="value" id="assist-stop" style="color:#f44336;">--</span>
                     </div>
                 </div>
+
+                <!-- 做T专用指标 -->
+                <div class="dayt-indicators" style="margin-top:8px; padding-top:8px; border-top:1px dashed #333;">
+                    <div style="font-size:10px; color:#64b5f6; margin-bottom:5px; font-weight:bold;">📊 日内做T参考</div>
+                    <div class="data-row">
+                        <span class="label">日内区间</span>
+                        <span class="value" style="font-size:10px;">
+                            <span id="assist-intraday-range">--</span>
+                        </span>
+                    </div>
+                    <div class="data-row">
+                        <span class="label">区间位置</span>
+                        <span class="value">
+                            <span id="assist-range-position">--</span>
+                            <span id="assist-range-signal" style="margin-left:5px; font-size:9px;"></span>
+                        </span>
+                    </div>
+                    <div class="data-row">
+                        <span class="label">做T信号</span>
+                        <span class="value" id="assist-dayt-signal" style="font-weight:bold;">--</span>
+                    </div>
+                </div>
                 
                 <!-- Position Section -->
                 <div id="assist-pos-container" style="display:none; margin-top:5px; border-top:1px dashed #333; padding-top:5px;">
@@ -879,6 +901,80 @@ class TradingAssistant {
             
             const stopLoss = price - (atr * 2);
             document.getElementById("assist-stop").innerText = stopLoss.toFixed(2);
+        }
+
+        // === 做T专用指标计算 ===
+        if (this.state.sessionHigh > 0 && this.state.sessionLow > 0 && this.state.sessionLow < this.state.sessionHigh) {
+            // 1. 日内区间
+            const range = this.state.sessionHigh - this.state.sessionLow;
+            const rangePercent = (range / this.state.sessionLow) * 100;
+            document.getElementById("assist-intraday-range").innerText = 
+                `${this.state.sessionLow.toFixed(2)}-${this.state.sessionHigh.toFixed(2)} (${rangePercent.toFixed(2)}%)`;
+
+            // 2. 当前价格在区间中的位置 (0-100%)
+            const positionInRange = ((price - this.state.sessionLow) / range) * 100;
+            document.getElementById("assist-range-position").innerText = positionInRange.toFixed(0) + "%";
+            
+            const rangeSignalEl = document.getElementById("assist-range-signal");
+            if (positionInRange >= 80) {
+                rangeSignalEl.innerText = "高位";
+                rangeSignalEl.style.color = "#f44336";
+            } else if (positionInRange >= 60) {
+                rangeSignalEl.innerText = "偏高";
+                rangeSignalEl.style.color = "#ff9800";
+            } else if (positionInRange <= 20) {
+                rangeSignalEl.innerText = "低位";
+                rangeSignalEl.style.color = "#4caf50";
+            } else if (positionInRange <= 40) {
+                rangeSignalEl.innerText = "偏低";
+                rangeSignalEl.style.color = "#66bb6a";
+            } else {
+                rangeSignalEl.innerText = "中位";
+                rangeSignalEl.style.color = "#9e9e9e";
+            }
+
+            // 3. 综合做T信号（结合位置 + RSI + 波动率）
+            const rsi = this.state.history.length >= 14 ? this.calculateRSI(this.state.history, 14) : 50;
+            const vol = parseFloat(document.getElementById("assist-vol").innerText) || 0;
+            
+            let daytSignal = "观望";
+            let daytColor = "#9e9e9e";
+            
+            // 判断是否有做T空间（区间至少 1.5%）
+            const hasSpace = rangePercent >= 1.5;
+            
+            if (!hasSpace) {
+                daytSignal = "🔒窄幅震荡";
+                daytColor = "#555";
+            } else if (positionInRange >= 75 && rsi > 60) {
+                // 高位 + RSI偏高 = 卖出做T
+                daytSignal = "📉高抛";
+                daytColor = "#f44336";
+            } else if (positionInRange >= 65 && rsi > 65) {
+                // 偏高 + RSI超买 = 减仓
+                daytSignal = "📤减仓";
+                daytColor = "#ff5722";
+            } else if (positionInRange <= 25 && rsi < 40) {
+                // 低位 + RSI偏低 = 买入做T
+                daytSignal = "📥低吸";
+                daytColor = "#4caf50";
+            } else if (positionInRange <= 35 && rsi < 45) {
+                // 偏低 + RSI适中 = 加仓
+                daytSignal = "✅加仓";
+                daytColor = "#66bb6a";
+            } else if (vol > 0.5 && positionInRange < 50) {
+                // 波动率大 + 低位 = 收筹
+                daytSignal = "📥收筹";
+                daytColor = "#4caf50";
+            } else if (vol > 0.5 && positionInRange > 50) {
+                // 波动率大 + 高位 = 出货
+                daytSignal = "📤出货";
+                daytColor = "#f44336";
+            }
+            
+            const daytSignalEl = document.getElementById("assist-dayt-signal");
+            daytSignalEl.innerText = daytSignal;
+            daytSignalEl.style.color = daytColor;
         }
 
         // Position UI
