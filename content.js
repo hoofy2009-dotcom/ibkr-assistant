@@ -229,6 +229,32 @@ class TradingAssistant {
                     <span class="label">波动率 (σ)</span>
                     <span class="value" id="assist-vol">--</span>
                 </div>
+
+                <!-- 技术指标 -->
+                <div class="tech-indicators" style="margin-top:8px; padding-top:8px; border-top:1px dashed #333;">
+                    <div class="data-row">
+                        <span class="label">RSI(14)</span>
+                        <span class="value">
+                            <span id="assist-rsi">--</span>
+                            <span id="assist-rsi-signal" style="margin-left:5px; font-size:9px;"></span>
+                        </span>
+                    </div>
+                    <div class="data-row">
+                        <span class="label">MACD</span>
+                        <span class="value">
+                            <span id="assist-macd">--</span>
+                            <span id="assist-macd-signal" style="margin-left:5px; font-size:9px;"></span>
+                        </span>
+                    </div>
+                    <div class="data-row">
+                        <span class="label">ATR(14)</span>
+                        <span class="value" id="assist-atr">--</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="label">动态止损</span>
+                        <span class="value" id="assist-stop" style="color:#f44336;">--</span>
+                    </div>
+                </div>
                 
                 <!-- Position Section -->
                 <div id="assist-pos-container" style="display:none; margin-top:5px; border-top:1px dashed #333; padding-top:5px;">
@@ -811,6 +837,48 @@ class TradingAssistant {
             const variance = recent.reduce((a,b)=>a + Math.pow(b-mean, 2), 0) / recent.length;
             const stdDev = Math.sqrt(variance);
             document.getElementById("assist-vol").innerText = stdDev.toFixed(3);
+        }
+
+        // 技术指标计算
+        if (this.state.history.length >= 14) {
+            const rsi = this.calculateRSI(this.state.history, 14);
+            document.getElementById("assist-rsi").innerText = rsi.toFixed(2);
+            
+            const rsiSignal = document.getElementById("assist-rsi-signal");
+            if (rsi < 30) {
+                rsiSignal.innerText = "超卖";
+                rsiSignal.style.color = "#4caf50";
+            } else if (rsi > 70) {
+                rsiSignal.innerText = "超买";
+                rsiSignal.style.color = "#f44336";
+            } else {
+                rsiSignal.innerText = "中性";
+                rsiSignal.style.color = "#999";
+            }
+        }
+
+        if (this.state.history.length >= 26) {
+            const macd = this.calculateMACD(this.state.history);
+            document.getElementById("assist-macd").innerText = macd.histogram.toFixed(3);
+            
+            const macdSignal = document.getElementById("assist-macd-signal");
+            if (macd.histogram > 0 && macd.prev < 0) {
+                macdSignal.innerText = "金叉";
+                macdSignal.style.color = "#4caf50";
+            } else if (macd.histogram < 0 && macd.prev > 0) {
+                macdSignal.innerText = "死叉";
+                macdSignal.style.color = "#f44336";
+            } else {
+                macdSignal.innerText = macd.histogram > 0 ? "多头" : "空头";
+                macdSignal.style.color = "#999";
+            }
+
+            // ATR 和动态止损
+            const atr = this.calculateATR(this.state.history, 14);
+            document.getElementById("assist-atr").innerText = atr.toFixed(2);
+            
+            const stopLoss = price - (atr * 2);
+            document.getElementById("assist-stop").innerText = stopLoss.toFixed(2);
         }
 
         // Position UI
@@ -1895,6 +1963,89 @@ class TradingAssistant {
             else ctx.lineTo(x, y);
         }
         ctx.stroke();
+    }
+
+    // === 技术指标计算方法 ===
+    calculateRSI(prices, period = 14) {
+        if (prices.length < period + 1) return 50;
+        
+        let gains = 0;
+        let losses = 0;
+        
+        for (let i = prices.length - period; i < prices.length; i++) {
+            const change = prices[i] - prices[i - 1];
+            if (change > 0) {
+                gains += change;
+            } else {
+                losses += Math.abs(change);
+            }
+        }
+        
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        
+        if (avgLoss === 0) return 100;
+        const rs = avgGain / avgLoss;
+        return 100 - (100 / (1 + rs));
+    }
+
+    calculateEMA(prices, period) {
+        if (prices.length < period) return prices[prices.length - 1];
+        
+        const k = 2 / (period + 1);
+        let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
+        
+        for (let i = period; i < prices.length; i++) {
+            ema = prices[i] * k + ema * (1 - k);
+        }
+        
+        return ema;
+    }
+
+    calculateMACD(prices) {
+        if (prices.length < 26) return { macd: 0, signal: 0, histogram: 0, prev: 0 };
+        
+        const ema12 = this.calculateEMA(prices, 12);
+        const ema26 = this.calculateEMA(prices, 26);
+        const macd = ema12 - ema26;
+        
+        // 简化: 使用最近9个MACD值计算signal (实际应用EMA，这里简化为SMA)
+        const macdLine = [];
+        for (let i = 26; i <= prices.length; i++) {
+            const slice = prices.slice(0, i);
+            const e12 = this.calculateEMA(slice, 12);
+            const e26 = this.calculateEMA(slice, 26);
+            macdLine.push(e12 - e26);
+        }
+        
+        const signal = macdLine.length >= 9 
+            ? macdLine.slice(-9).reduce((a, b) => a + b, 0) / 9
+            : macd;
+        
+        const histogram = macd - signal;
+        const prev = macdLine.length >= 2 ? macdLine[macdLine.length - 2] - signal : 0;
+        
+        return { macd, signal, histogram, prev };
+    }
+
+    calculateATR(prices, period = 14) {
+        if (prices.length < period + 1) return 0;
+        
+        let trSum = 0;
+        for (let i = prices.length - period; i < prices.length; i++) {
+            const high = prices[i];
+            const low = prices[i];
+            const prevClose = prices[i - 1];
+            
+            const tr = Math.max(
+                high - low,
+                Math.abs(high - prevClose),
+                Math.abs(low - prevClose)
+            );
+            trSum += tr;
+        }
+        
+        return trSum / period;
     }
 
     notify(title, body) {

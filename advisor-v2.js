@@ -53,43 +53,6 @@ class TradingAdvisorV2 {
             </div>
             
             <div class="ibkr-v2-content">
-                <!-- 基础信息 -->
-                <div class="v2-section">
-                    <div class="v2-info-row">
-                        <span class="v2-label">标的</span>
-                        <span class="v2-value" id="v2-symbol">检测中...</span>
-                    </div>
-                    <div class="v2-info-row">
-                        <span class="v2-label">价格</span>
-                        <span class="v2-value" id="v2-price">--</span>
-                    </div>
-                </div>
-
-                <!-- 技术指标 -->
-                <div class="v2-section">
-                    <div class="v2-section-title">📈 技术指标</div>
-                    <div class="v2-indicators">
-                        <div class="v2-indicator">
-                            <span class="v2-ind-label">RSI(14)</span>
-                            <span class="v2-ind-value" id="v2-rsi">--</span>
-                            <span class="v2-ind-signal" id="v2-rsi-signal"></span>
-                        </div>
-                        <div class="v2-indicator">
-                            <span class="v2-ind-label">MACD</span>
-                            <span class="v2-ind-value" id="v2-macd">--</span>
-                            <span class="v2-ind-signal" id="v2-macd-signal"></span>
-                        </div>
-                        <div class="v2-indicator">
-                            <span class="v2-ind-label">ATR(14)</span>
-                            <span class="v2-ind-value" id="v2-atr">--</span>
-                        </div>
-                        <div class="v2-indicator">
-                            <span class="v2-ind-label">动态止损</span>
-                            <span class="v2-ind-value" id="v2-stop">--</span>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- 实时新闻 -->
                 <div class="v2-section">
                     <div class="v2-section-title">📰 实时新闻 (Finnhub)</div>
@@ -271,52 +234,7 @@ class TradingAdvisorV2 {
     }
 
     updateUI() {
-        document.getElementById("v2-symbol").innerText = this.state.symbol;
-        document.getElementById("v2-price").innerText = this.state.price.toFixed(2);
-
-        // 计算技术指标（需要足够的历史数据）
-        if (this.state.history.length >= 14) {
-            const rsi = this.calculateRSI(this.state.history, 14);
-            document.getElementById("v2-rsi").innerText = rsi.toFixed(2);
-            
-            const rsiSignal = document.getElementById("v2-rsi-signal");
-            if (rsi < 30) {
-                rsiSignal.innerText = "超卖";
-                rsiSignal.style.color = "#4caf50";
-            } else if (rsi > 70) {
-                rsiSignal.innerText = "超买";
-                rsiSignal.style.color = "#f44336";
-            } else {
-                rsiSignal.innerText = "中性";
-                rsiSignal.style.color = "#aaa";
-            }
-        }
-
-        if (this.state.history.length >= 26) {
-            const macd = this.calculateMACD(this.state.history);
-            document.getElementById("v2-macd").innerText = macd.histogram.toFixed(3);
-            
-            const macdSignal = document.getElementById("v2-macd-signal");
-            if (macd.histogram > 0 && macd.prev < 0) {
-                macdSignal.innerText = "金叉";
-                macdSignal.style.color = "#4caf50";
-            } else if (macd.histogram < 0 && macd.prev > 0) {
-                macdSignal.innerText = "死叉";
-                macdSignal.style.color = "#f44336";
-            } else {
-                macdSignal.innerText = macd.histogram > 0 ? "多头" : "空头";
-                macdSignal.style.color = "#aaa";
-            }
-
-            // ATR 和动态止损
-            const atr = this.calculateATR(this.state.history, 14);
-            document.getElementById("v2-atr").innerText = atr.toFixed(2);
-            
-            const stopLoss = this.state.price - (atr * 2);
-            document.getElementById("v2-stop").innerText = stopLoss.toFixed(2);
-        }
-
-        // 更新交易统计
+        // 只更新交易统计
         this.updateJournalStats();
     }
 
