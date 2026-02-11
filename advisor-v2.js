@@ -374,36 +374,68 @@ class TradingAdvisorV2 {
         btn.innerText = "分析中...";
         box.innerText = "正在整合技术指标、新闻、财报进行深度分析...";
 
-        // 收集数据
+        // 收集技术指标数据
         const rsi = parseFloat(document.getElementById("v2-rsi").innerText) || 50;
         const macd = parseFloat(document.getElementById("v2-macd").innerText) || 0;
         const atr = parseFloat(document.getElementById("v2-atr").innerText) || 0;
         
-        // 构建增强提示词
+        // 收集新闻数据
+        const newsBox = document.getElementById("v2-news");
+        const newsItems = newsBox.querySelectorAll(".v2-news-item");
+        let newsText = "";
+        if (newsItems.length > 0) {
+            const headlines = Array.from(newsItems).slice(0, 5).map(item => {
+                const title = item.querySelector(".v2-news-title")?.innerText || "";
+                return title;
+            });
+            newsText = headlines.join("; ");
+        } else {
+            newsText = "暂无最新新闻";
+        }
+
+        // 收集财报数据
+        const earningsBox = document.getElementById("v2-earnings");
+        const earningsText = earningsBox.innerText || "暂无财报信息";
+        
+        // 构建增强提示词 - V2 深度分析版本
         const prompt = `
-            作为专业量化分析师，请分析 ${this.state.symbol}：
+            作为**资深量化分析师 + 基本面研究员**，请对 ${this.state.symbol} 进行深度分析：
             
-            【技术指标】
-            - RSI(14): ${rsi.toFixed(2)} ${rsi < 30 ? '(超卖)' : rsi > 70 ? '(超买)' : ''}
-            - MACD: ${macd.toFixed(3)} ${macd > 0 ? '(多头)' : '(空头)'}
-            - ATR(14): ${atr.toFixed(2)}
-            - 当前价: ${this.state.price}
-            - 动态止损位: ${(this.state.price - atr * 2).toFixed(2)}
+            【技术面】（量化信号）
+            - RSI(14): ${rsi.toFixed(2)} ${rsi < 30 ? '(超卖区)' : rsi > 70 ? '(超买区)' : '(中性)'}
+            - MACD: ${macd.toFixed(3)} ${macd > 0 ? '(多头趋势)' : '(空头趋势)'}
+            - ATR(14): ${atr.toFixed(2)} (波动率指标)
+            - 当前价: $${this.state.price}
+            - 建议止损: $${(this.state.price - atr * 2).toFixed(2)} (基于 2×ATR)
             
-            【要求】
-            1. 综合技术指标给出明确操作建议（BUY/SELL/HOLD）
-            2. 说明止损位和目标位
-            3. 风险评估（1-10分）
-            4. 用中文回答，100字以内
+            【基本面】（新闻情报）
+            最近7天新闻：${newsText}
             
-            返回JSON格式：
+            【催化剂】（财报预期）
+            ${earningsText}
+            
+            【分析要求】
+            1. **技术+基本面结合**：不要只看技术指标，必须考虑新闻情绪和财报催化剂
+            2. **明确操作建议**：BUY（买入）/ SELL（卖出）/ HOLD（观望）
+            3. **风险量化**：1-10分（1=极低风险, 10=极高风险）
+            4. **止损/目标位**：基于 ATR 和新闻情绪综合判断
+            5. **简洁有力**：150字以内，突出核心逻辑
+            
+            **核心差异点**：
+            - 如果新闻偏空但技术指标超卖 → 可能是"利空出尽"反弹机会
+            - 如果财报即将公布且预期良好 → 增加持有信心
+            - 如果技术指标超买且新闻炒作过度 → 警惕回调风险
+            
+            返回JSON格式（不要Markdown代码块）：
             {
                 "action": "BUY|SELL|HOLD",
                 "confidence": 0.0-1.0,
                 "stopLoss": 数字,
                 "target": 数字,
                 "risk": 1-10,
-                "reason": "简短理由"
+                "reason": "综合技术面+基本面的核心理由",
+                "newsImpact": "positive|negative|neutral",
+                "earningsRisk": "high|medium|low"
             }
         `;
 
@@ -439,19 +471,54 @@ class TradingAdvisorV2 {
             result = result.replace(/```json/g, "").replace(/```/g, "").trim();
             const analysis = JSON.parse(result);
 
-            // 显示结果
+            // 新闻情绪图标
+            const newsEmoji = {
+                'positive': '📈',
+                'negative': '📉',
+                'neutral': '➡️'
+            };
+            const newsColor = {
+                'positive': '#4caf50',
+                'negative': '#f44336',
+                'neutral': '#999'
+            };
+
+            // 财报风险图标
+            const earningsEmoji = {
+                'high': '⚠️',
+                'medium': '⚡',
+                'low': '✅'
+            };
+
+            // 显示结果（增强版 - 显示基本面影响）
             box.innerHTML = `
                 <div class="v2-analysis-result">
-                    <div class="v2-action" style="color: ${analysis.action === 'BUY' ? '#4caf50' : analysis.action === 'SELL' ? '#f44336' : '#aaa'}">
-                        <b>${analysis.action}</b> (置信度: ${(analysis.confidence * 100).toFixed(0)}%)
+                    <div class="v2-action" style="color: ${analysis.action === 'BUY' ? '#4caf50' : analysis.action === 'SELL' ? '#f44336' : '#aaa'}; font-size: 16px; font-weight: bold; margin-bottom: 8px;">
+                        ${analysis.action} (置信度: ${(analysis.confidence * 100).toFixed(0)}%)
                     </div>
-                    <div class="v2-levels">
-                        <span>止损: <b>${analysis.stopLoss}</b></span>
-                        <span>目标: <b>${analysis.target}</b></span>
+                    
+                    <div class="v2-levels" style="display: flex; gap: 15px; margin-bottom: 8px; font-size: 11px;">
+                        <span>止损: <b style="color: #f44336;">$${analysis.stopLoss}</b></span>
+                        <span>目标: <b style="color: #4caf50;">$${analysis.target}</b></span>
                         <span>风险: <b>${analysis.risk}/10</b></span>
                     </div>
-                    <div class="v2-reason">${analysis.reason}</div>
-                    <button id="v2-log-trade" class="v2-btn-sm" style="margin-top: 8px;">记录到交易日志</button>
+                    
+                    <div class="v2-fundamentals" style="display: flex; gap: 10px; margin-bottom: 10px; font-size: 10px; padding: 5px; background: rgba(255,255,255,0.05); border-radius: 3px;">
+                        <span style="color: ${newsColor[analysis.newsImpact] || '#999'};">
+                            ${newsEmoji[analysis.newsImpact] || '➡️'} 新闻: ${analysis.newsImpact || 'neutral'}
+                        </span>
+                        <span style="color: ${analysis.earningsRisk === 'high' ? '#f44336' : analysis.earningsRisk === 'low' ? '#4caf50' : '#ffa726'};">
+                            ${earningsEmoji[analysis.earningsRisk] || '⚡'} 财报风险: ${analysis.earningsRisk || 'medium'}
+                        </span>
+                    </div>
+                    
+                    <div class="v2-reason" style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; font-size: 11px; line-height: 1.4; color: #ddd; margin-bottom: 8px;">
+                        ${analysis.reason}
+                    </div>
+                    
+                    <button id="v2-log-trade" class="v2-btn-sm" style="width: 100%; background: #007acc; color: white; border: none; padding: 6px; border-radius: 3px; cursor: pointer; font-size: 11px;">
+                        📝 记录到交易日志
+                    </button>
                 </div>
             `;
 
