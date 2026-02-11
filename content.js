@@ -949,25 +949,19 @@ class TradingAssistant {
                  }
             }
         } else {
-            // -- Opportunity Scanning --
+            // -- 做T机会扫描（仅盘中）--
+            // 不再自动触发AI分析，用户需要手动点击
+            // 只在极端波动时发送提醒通知
             const volStr = document.getElementById("assist-vol").innerText || "0";
             const vol = parseFloat(volStr);
-            let autoReason = null;
             const now = Date.now();
 
-            if (isRegular && this.state.history.length > 20 && (!this.lastAutoTrigger || (now - this.lastAutoTrigger > 300000))) {
-                 if (price >= this.state.sessionHigh && price > this.state.lastPrice) {
-                     autoReason = "强势突破日内新高 (Potential Buy)";
-                 }
-                 else if (vol > (VOL_THRESHOLD + 0.3)) { // Higher threshold for entry
-                     autoReason = "盘面剧烈异动 (Volatility Spike)";
-                 }
-
-                 if (autoReason) {
+            if (isRegular && this.state.history.length > 20 && (!this.lastAutoTrigger || (now - this.lastAutoTrigger > 600000))) {
+                 // 极端波动提醒（不触发AI分析）
+                 if (vol > (VOL_THRESHOLD + 0.5)) {
                      this.lastAutoTrigger = now;
-                     console.log("Auto AI Trigger (Buy): " + autoReason);
-                     this.notify("🚀 Opportunity Alert", autoReason); // Desktop Push
-                     this.triggerAIAnalysis(autoReason);
+                     console.log("🔔 Volatility Alert: " + vol.toFixed(3));
+                     this.notify("� 波动提醒", `${ctx.symbol} 波动率飙升至 ${vol.toFixed(3)}，关注做T机会`);
                  }
             }
         }
@@ -2468,28 +2462,32 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 const colorClass = changeP >= 0 ? "value-up" : "value-down";
                 const changeStr = sign + changeP.toFixed(2) + "%";
                 
-                // --- Strategy Signal Logic for Watchlist ---
-                // Based on simple daily change thresholds
+                // --- 做T策略信号逻辑（Watchlist）---
+                // 基于日内涨跌判断低吸高抛机会
                 let action = "观望";
                 let actionColor = "#555";
                 let actionReason = "涨跌幅在正常波动范围内";
                 
-                if (changeP >= 3.0) { 
-                    action = "🚀追涨"; 
-                    actionColor = "#4caf50"; // Green
-                    actionReason = `日内涨幅${changeP.toFixed(2)}%，强势突破，考虑追涨机会`;
+                if (changeP >= 2.5) { 
+                    action = "�卖出"; 
+                    actionColor = "#f44336"; // Red
+                    actionReason = `日内涨幅${changeP.toFixed(2)}%，高位卖出做T，等待回调再接`;
                 } else if (changeP >= 1.0) {
-                    action = "持有";
-                    actionColor = "#81c784"; // Light Green
-                    actionReason = `日内涨幅${changeP.toFixed(2)}%，温和上涨，建议持有观察`;
-                } else if (changeP <= -5.0) {
-                    action = "⚠️避险";
-                    actionColor = "#ef5350"; // Red
-                    actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，大幅下跌，注意避险`;
-                } else if (changeP <= -2.5) {
-                    action = "🛒抄底";
+                    action = "📤减仓";
                     actionColor = "#ff9800"; // Orange
-                    actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，回调明显，可考虑分批抄底`;
+                    actionReason = `日内涨幅${changeP.toFixed(2)}%，部分获利了结，保留底仓`;
+                } else if (changeP <= -3.0) {
+                    action = "📥收筹";
+                    actionColor = "#4caf50"; // Green
+                    actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，低位收筹码，分批建仓`;
+                } else if (changeP <= -1.5) {
+                    action = "✅买入";
+                    actionColor = "#66bb6a"; // Light Green
+                    actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，回调到位，适合低吸做T`;
+                } else if (changeP > -0.5 && changeP < 0.5) {
+                    action = "🔄观察";
+                    actionColor = "#9e9e9e"; // Gray
+                    actionReason = "价格窄幅震荡，等待明确方向";
                 }
 
                 // 1. Update Modal UI
@@ -2578,11 +2576,9 @@ class TradeExecutor {
     }
 
     evaluateSignal(action, sentiment, ctx) {
-        // 显示顶部横幅通知（仅买入/追涨时）
-        if (action === "BUY") {
-            this.app.showTopBanner(`📈 ${ctx.symbol}: 买入信号 (情绪评分: ${sentiment}/10)`, action);
-        }
-
+        // 取消顶部横幅通知（做T模式下不需要追涨提示）
+        // 用户需要手动查看分析结果决策
+        
         if (action === "HOLD") return;
 
         // Safety Gates

@@ -374,10 +374,27 @@ class TradingAdvisorV2 {
         btn.innerText = "分析中...";
         box.innerText = "正在整合技术指标、新闻、财报进行深度分析...";
 
+        // 检查数据是否足够
+        if (!this.state.symbol || this.state.symbol === "DETECTED") {
+            box.innerText = "⚠️ 未检测到有效股票代码，请刷新页面";
+            btn.disabled = false;
+            btn.innerText = "开始分析";
+            return;
+        }
+
+        if (this.state.history.length < 14) {
+            box.innerText = `⏳ 数据积累中... (${this.state.history.length}/14)，请稍候`;
+            btn.disabled = false;
+            btn.innerText = "开始分析";
+            return;
+        }
+
         // 收集技术指标数据
-        const rsi = parseFloat(document.getElementById("v2-rsi").innerText) || 50;
-        const macd = parseFloat(document.getElementById("v2-macd").innerText) || 0;
-        const atr = parseFloat(document.getElementById("v2-atr").innerText) || 0;
+        const rsi = this.calculateRSI(this.state.history, 14);
+        const macd = this.calculateMACD(this.state.history);
+        const atr = this.calculateATR(this.state.history, 14);
+        
+        console.log(`V2 Analysis: Symbol=${this.state.symbol}, Price=${this.state.price}, RSI=${rsi.toFixed(2)}, MACD=${macd.histogram.toFixed(3)}, ATR=${atr.toFixed(2)}`);
         
         // 收集新闻数据
         const newsBox = document.getElementById("v2-news");
@@ -390,7 +407,7 @@ class TradingAdvisorV2 {
             });
             newsText = headlines.join("; ");
         } else {
-            newsText = "暂无最新新闻";
+            newsText = "暂无最新新闻（可能需要配置 Finnhub API Key）";
         }
 
         // 收集财报数据
@@ -403,9 +420,9 @@ class TradingAdvisorV2 {
             
             【技术面】（量化信号）
             - RSI(14): ${rsi.toFixed(2)} ${rsi < 30 ? '(超卖区)' : rsi > 70 ? '(超买区)' : '(中性)'}
-            - MACD: ${macd.toFixed(3)} ${macd > 0 ? '(多头趋势)' : '(空头趋势)'}
+            - MACD: ${macd.histogram.toFixed(3)} ${macd.histogram > 0 ? '(多头趋势)' : '(空头趋势)'}
             - ATR(14): ${atr.toFixed(2)} (波动率指标)
-            - 当前价: $${this.state.price}
+            - 当前价: $${this.state.price.toFixed(2)}
             - 建议止损: $${(this.state.price - atr * 2).toFixed(2)} (基于 2×ATR)
             
             【基本面】（新闻情报）
