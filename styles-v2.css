@@ -154,15 +154,31 @@
     overflow-y: auto;
     color: #ccc;
     font-size: 11px;
+    scroll-behavior: smooth; /* 平滑滚动 */
 }
 
 .v2-news-item {
     padding: 6px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s;
 }
 
 .v2-news-item:last-child {
     border-bottom: none;
+}
+
+/* 可点击新闻样式 */
+.v2-news-clickable {
+    cursor: pointer !important;
+}
+
+.v2-news-clickable:hover {
+    background: rgba(0, 212, 255, 0.1);
+    padding-left: 4px;
+}
+
+.v2-news-clickable:active {
+    background: rgba(0, 212, 255, 0.2);
 }
 
 .v2-news-title {

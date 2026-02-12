@@ -7,6 +7,7 @@ class TradingAdvisorV2 {
     constructor() {
         this.panel = null;
         this.minimizedBtn = null;
+        this.newsScrollInterval = null; // 新闻自动滚动定时器
         this.state = {
             symbol: "",
             price: 0,
@@ -433,7 +434,7 @@ class TradingAdvisorV2 {
         }
     }
 
-    // 渲染新闻（支持中英文切换）
+    // 渲染新闻（支持中英文切换 + 自动滚动 + 点击跳转）
     async renderNews(showOriginal = false) {
         if (!this.newsData || this.newsData.length === 0) {
             document.getElementById("v2-news").innerHTML = "暂无新闻";
@@ -442,10 +443,16 @@ class TradingAdvisorV2 {
 
         const newsContainer = document.getElementById("v2-news");
         
+        // 停止旧的自动滚动
+        if (this.newsScrollInterval) {
+            clearInterval(this.newsScrollInterval);
+            this.newsScrollInterval = null;
+        }
+        
         if (showOriginal) {
-            // 显示原文
+            // 显示原文 + 点击跳转
             const newsHtml = this.newsData.map(item => `
-                <div class="v2-news-item">
+                <div class="v2-news-item v2-news-clickable" data-url="${item.url || '#'}">
                     <div class="v2-news-title">${item.headline}</div>
                     <div class="v2-news-meta">${new Date(item.datetime * 1000).toLocaleDateString()} | ${item.source}</div>
                 </div>
@@ -459,6 +466,11 @@ class TradingAdvisorV2 {
             // 添加事件监听器
             const btn = document.getElementById("v2-toggle-lang");
             if (btn) btn.onclick = () => this.renderNews(false);
+            
+            // 绑定点击跳转事件
+            this.bindNewsClickEvents();
+            // 启动自动滚动
+            this.startNewsAutoScroll();
         } else {
             // 显示翻译按钮和加载状态
             newsContainer.innerHTML = `
@@ -476,7 +488,7 @@ class TradingAdvisorV2 {
             const translated = await this.translateNews();
             
             const newsHtml = this.newsData.map((item, index) => `
-                <div class="v2-news-item">
+                <div class="v2-news-item v2-news-clickable" data-url="${item.url || '#'}">
                     <div class="v2-news-title">${translated[index] || item.headline}</div>
                     <div class="v2-news-meta">${new Date(item.datetime * 1000).toLocaleDateString()} | ${item.source}</div>
                 </div>
@@ -492,7 +504,57 @@ class TradingAdvisorV2 {
             // 翻译完成后重新绑定事件监听器
             const btnAfter = document.getElementById("v2-toggle-lang");
             if (btnAfter) btnAfter.onclick = () => this.renderNews(true);
+            
+            // 绑定点击跳转事件
+            this.bindNewsClickEvents();
+            // 启动自动滚动
+            this.startNewsAutoScroll();
         }
+    }
+
+    // 新闻点击跳转事件
+    bindNewsClickEvents() {
+        const newsItems = document.querySelectorAll(".v2-news-clickable");
+        newsItems.forEach(item => {
+            item.addEventListener("click", (e) => {
+                const url = item.getAttribute("data-url");
+                if (url && url !== '#') {
+                    window.open(url, '_blank');
+                }
+            });
+            // 鼠标悬停时显示手型指针
+            item.style.cursor = "pointer";
+        });
+    }
+
+    // 新闻自动滚动（从下往上）
+    startNewsAutoScroll() {
+        const newsContainer = document.getElementById("v2-news");
+        if (!newsContainer) return;
+
+        let isPaused = false;
+        
+        // 鼠标悬停时暂停滚动
+        newsContainer.addEventListener("mouseenter", () => {
+            isPaused = true;
+        });
+        
+        newsContainer.addEventListener("mouseleave", () => {
+            isPaused = false;
+        });
+
+        // 每50ms滚动1px，流畅平滑
+        this.newsScrollInterval = setInterval(() => {
+            if (isPaused) return;
+            
+            // 从下往上滚动
+            newsContainer.scrollTop += 1;
+            
+            // 滚动到底部时重置到顶部
+            if (newsContainer.scrollTop >= newsContainer.scrollHeight - newsContainer.clientHeight) {
+                newsContainer.scrollTop = 0;
+            }
+        }, 50); // 50ms = 每秒滚动20px
     }
 
     // 使用 AI 翻译新闻标题
