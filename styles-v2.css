@@ -93,8 +93,10 @@
     border-bottom: 1px solid rgba(0, 212, 255, 0.2);
     padding-bottom: 4px;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 /* 折叠按钮 */
@@ -107,6 +109,7 @@
     border-radius: 3px;
     cursor: pointer;
     transition: all 0.2s;
+    flex-shrink: 0;
 }
 
 .v2-collapse-btn:hover {

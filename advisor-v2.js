@@ -67,7 +67,7 @@ class TradingAdvisorV2 {
                 <div class="v2-section">
                     <div class="v2-section-title">
                         📰 实时新闻 (Finnhub)
-                        <button class="v2-collapse-btn" onclick="ibkrAdvisorV2.toggleSection('news')">▼</button>
+                        <button class="v2-collapse-btn" data-section="news">▼</button>
                     </div>
                     <div id="v2-news-section" class="v2-collapsible-section">
                         <div id="v2-news" class="v2-news-list-compact">配置 API Key 以启用...</div>
@@ -78,7 +78,7 @@ class TradingAdvisorV2 {
                 <div class="v2-section">
                     <div class="v2-section-title">
                         📅 财报信息
-                        <button class="v2-collapse-btn" onclick="ibkrAdvisorV2.toggleSection('earnings')">▼</button>
+                        <button class="v2-collapse-btn" data-section="earnings">▼</button>
                     </div>
                     <div id="v2-earnings-section" class="v2-collapsible-section">
                         <div id="v2-earnings" class="v2-earnings-box">加载中...</div>
@@ -89,7 +89,7 @@ class TradingAdvisorV2 {
                 <div class="v2-section">
                     <div class="v2-section-title">
                         🤖 AI 深度分析
-                        <button class="v2-collapse-btn" onclick="ibkrAdvisorV2.toggleSection('analysis')">▼</button>
+                        <button class="v2-collapse-btn" data-section="analysis">▼</button>
                     </div>
                     <div id="v2-analysis-section" class="v2-collapsible-section">
                         <button id="v2-analyze" class="v2-btn-analyze">开始分析</button>
@@ -162,14 +162,23 @@ class TradingAdvisorV2 {
         document.querySelector(".v2-modal-close").onclick = () => this.toggleSettings();
         document.getElementById("v2-view-journal").onclick = () => this.showJournalModal();
         
+        // 【新增】绑定折叠按钮事件
+        document.querySelectorAll('.v2-collapse-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const section = btn.getAttribute('data-section');
+                this.toggleSection(section, btn);
+            };
+        });
+        
         // 添加拖动功能
         this.makePanelDraggable();
     }
 
     // 【新增】折叠/展开功能
-    toggleSection(section) {
+    toggleSection(section, btn) {
         const sectionEl = document.getElementById(`v2-${section}-section`);
-        const btn = event.target;
+        if (!sectionEl || !btn) return;
         
         if (sectionEl.style.display === 'none') {
             sectionEl.style.display = 'block';
@@ -191,7 +200,7 @@ class TradingAdvisorV2 {
             chrome.storage.local.get([`v2_collapsed_${section}`], (result) => {
                 if (result[`v2_collapsed_${section}`]) {
                     const sectionEl = document.getElementById(`v2-${section}-section`);
-                    const btn = document.querySelector(`.v2-section-title:has(button[onclick*="${section}"]) .v2-collapse-btn`);
+                    const btn = document.querySelector(`.v2-collapse-btn[data-section="${section}"]`);
                     if (sectionEl && btn) {
                         sectionEl.style.display = 'none';
                         btn.textContent = '▶';
@@ -503,20 +512,30 @@ class TradingAdvisorV2 {
             this.newsScrollInterval = null;
         }
         
-        // 【新增】情绪统计移到标题区
+        // 【新增】情绪统计移到标题区（分行显示）
         const sentimentCounts = {
             positive: (this.newsSentiments || []).filter(s => s === 'positive').length,
             neutral: (this.newsSentiments || []).filter(s => s === 'neutral').length,
             negative: (this.newsSentiments || []).filter(s => s === 'negative').length
         };
-        const sentimentInfo = `<span style="font-size:11px;color:#999;margin-left:10px;">最近7天: ${sentimentCounts.positive}😊 ${sentimentCounts.neutral}😐 ${sentimentCounts.negative}😢</span>`;
+        const sentimentInfo = `<div style="font-size:10px;color:#999;margin-top:3px;">最近7天: ${sentimentCounts.positive}😊 ${sentimentCounts.neutral}😐 ${sentimentCounts.negative}😢</div>`;
         
         if (showOriginal) {
             // 更新标题区按钮
             if (titleEl) {
                 const collapseBtn = titleEl.querySelector('.v2-collapse-btn');
                 const collapseBtnHtml = collapseBtn ? collapseBtn.outerHTML : '';
-                titleEl.innerHTML = `📰 实时新闻 (Finnhub) ${sentimentInfo} <button class="v2-btn-toggle-small" onclick="ibkrAdvisorV2.renderNews(false)">🌐 中文</button> ${collapseBtnHtml}`;
+                titleEl.innerHTML = `
+                    <div style="flex:1;">
+                        📰 实时新闻 (Finnhub)
+                        <button class="v2-btn-toggle-small" id="v2-news-lang-btn">🌐 中文</button>
+                        ${sentimentInfo}
+                    </div>
+                    ${collapseBtnHtml}
+                `;
+                // 绑定事件
+                const btn = document.getElementById('v2-news-lang-btn');
+                if (btn) btn.onclick = () => this.renderNews(false);
             }
             
             // 显示原文 + 点击跳转
@@ -537,7 +556,17 @@ class TradingAdvisorV2 {
             if (titleEl) {
                 const collapseBtn = titleEl.querySelector('.v2-collapse-btn');
                 const collapseBtnHtml = collapseBtn ? collapseBtn.outerHTML : '';
-                titleEl.innerHTML = `📰 实时新闻 (Finnhub) ${sentimentInfo} <button class="v2-btn-toggle-small" onclick="ibkrAdvisorV2.renderNews(true)">🔤 原文</button> ${collapseBtnHtml}`;
+                titleEl.innerHTML = `
+                    <div style="flex:1;">
+                        📰 实时新闻 (Finnhub)
+                        <button class="v2-btn-toggle-small" id="v2-news-lang-btn">🔤 原文</button>
+                        ${sentimentInfo}
+                    </div>
+                    ${collapseBtnHtml}
+                `;
+                // 绑定事件
+                const btn = document.getElementById('v2-news-lang-btn');
+                if (btn) btn.onclick = () => this.renderNews(true);
             }
             
             // 显示加载状态
