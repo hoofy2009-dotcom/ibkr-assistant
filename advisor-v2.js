@@ -49,7 +49,10 @@ class TradingAdvisorV2 {
         this.panel.innerHTML = `
             <div class="ibkr-v2-header">
                 <span class="ibkr-v2-title">🚀 智能顾问 V2 (Pro)</span>
-                <button class="ibkr-v2-close">✕</button>
+                <div>
+                    <button class="ibkr-v2-minimize" title="最小化">_</button>
+                    <button class="ibkr-v2-close" title="关闭">✕</button>
+                </div>
             </div>
             
             <div class="ibkr-v2-content">
@@ -116,11 +119,22 @@ class TradingAdvisorV2 {
         `;
         
         document.body.appendChild(this.panel);
+        
+        // 创建最小化按钮
+        this.minimizedBtn = document.createElement("div");
+        this.minimizedBtn.className = "ibkr-v2-minimized-btn";
+        this.minimizedBtn.innerHTML = "🚀";
+        this.minimizedBtn.style.display = "none";
+        this.minimizedBtn.title = "展开智能顾问 V2";
+        this.minimizedBtn.onclick = () => this.toggleMinimize();
+        document.body.appendChild(this.minimizedBtn);
+        
         this.attachEventListeners();
     }
 
     attachEventListeners() {
-        document.querySelector(".ibkr-v2-close").onclick = () => this.panel.remove();
+        document.querySelector(".ibkr-v2-close").onclick = () => this.closePanel();
+        document.querySelector(".ibkr-v2-minimize").onclick = () => this.toggleMinimize();
         document.getElementById("v2-analyze").onclick = () => this.runAdvancedAnalysis();
         document.getElementById("v2-settings").onclick = () => this.toggleSettings();
         document.getElementById("v2-save-settings").onclick = () => this.saveSettings();
@@ -195,6 +209,23 @@ class TradingAdvisorV2 {
                 });
             }
         });
+    }
+
+    toggleMinimize() {
+        if (this.panel.style.display === "none") {
+            // 展开
+            this.panel.style.display = "flex";
+            this.minimizedBtn.style.display = "none";
+        } else {
+            // 最小化
+            this.panel.style.display = "none";
+            this.minimizedBtn.style.display = "flex";
+        }
+    }
+
+    closePanel() {
+        if (this.panel) this.panel.remove();
+        if (this.minimizedBtn) this.minimizedBtn.remove();
     }
 
     toggleSettings() {

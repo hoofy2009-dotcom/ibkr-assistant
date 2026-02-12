@@ -35,6 +35,13 @@
     text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
 }
 
+.ibkr-v2-header > div {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ibkr-v2-minimize,
 .ibkr-v2-close {
     background: none;
     border: none;
@@ -45,8 +52,10 @@
     width: 24px;
     height: 24px;
     border-radius: 4px;
+    transition: all 0.2s;
 }
 
+.ibkr-v2-minimize:hover,
 .ibkr-v2-close:hover {
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
@@ -414,4 +423,39 @@
 
 .v2-btn-save:hover {
     opacity: 0.9;
+}
+
+/* 最小化按钮 */
+.ibkr-v2-minimized-btn {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, #00d4ff 0%, #0096c7 100%);
+    border: 2px solid #0f3460;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 24px;
+    box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
+    z-index: 2147483639;
+    transition: all 0.3s;
+    animation: v2-pulse 2s infinite;
+}
+
+.ibkr-v2-minimized-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(0, 212, 255, 0.6);
+}
+
+@keyframes v2-pulse {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(0, 212, 255, 0.8);
+    }
 }
