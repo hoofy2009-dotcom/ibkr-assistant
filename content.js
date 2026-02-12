@@ -2632,23 +2632,23 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 let actionReason = "涨跌幅在正常波动范围内";
                 
                 if (changeP >= 2.5) { 
-                    action = "�卖出"; 
+                    action = "\u{1F4C9}卖出"; // 📉 使用Unicode转义
                     actionColor = "#f44336"; // Red
                     actionReason = `日内涨幅${changeP.toFixed(2)}%，高位卖出做T，等待回调再接`;
                 } else if (changeP >= 1.0) {
-                    action = "📤减仓";
+                    action = "\u{1F4E4}减仓"; // 📤 使用Unicode转义
                     actionColor = "#ff9800"; // Orange
                     actionReason = `日内涨幅${changeP.toFixed(2)}%，部分获利了结，保留底仓`;
                 } else if (changeP <= -3.0) {
-                    action = "📥收筹";
+                    action = "\u{1F4E5}收筹"; // 📥 使用Unicode转义
                     actionColor = "#4caf50"; // Green
                     actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，低位收筹码，分批建仓`;
                 } else if (changeP <= -1.5) {
-                    action = "✅买入";
+                    action = "\u2705买入"; // ✅ 使用Unicode转义
                     actionColor = "#66bb6a"; // Light Green
                     actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，回调到位，适合低吸做T`;
                 } else if (changeP > -0.5 && changeP < 0.5) {
-                    action = "🔄观察";
+                    action = "\u{1F504}观察"; // 🔄 使用Unicode转义
                     actionColor = "#9e9e9e"; // Gray
                     actionReason = "价格窄幅震荡，等待明确方向";
                 }
