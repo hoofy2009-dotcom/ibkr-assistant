@@ -452,18 +452,25 @@ class TradingAdvisorV2 {
             `).join("");
             newsContainer.innerHTML = `
                 <div class="v2-news-toggle">
-                    <button class="v2-btn-toggle" onclick="window.v2Assistant.renderNews(false)">🌐 显示中文</button>
+                    <button class="v2-btn-toggle" id="v2-toggle-lang">🌐 显示中文</button>
                 </div>
                 ${newsHtml}
             `;
+            // 添加事件监听器
+            const btn = document.getElementById("v2-toggle-lang");
+            if (btn) btn.onclick = () => this.renderNews(false);
         } else {
             // 显示翻译按钮和加载状态
             newsContainer.innerHTML = `
                 <div class="v2-news-toggle">
-                    <button class="v2-btn-toggle" onclick="window.v2Assistant.renderNews(true)">🔤 显示原文</button>
+                    <button class="v2-btn-toggle" id="v2-toggle-lang">🔤 显示原文</button>
                 </div>
                 <div style="text-align:center; color:#aaa; padding:20px;">翻译中...</div>
             `;
+            
+            // 先添加事件监听器（翻译前）
+            const btn = document.getElementById("v2-toggle-lang");
+            if (btn) btn.onclick = () => this.renderNews(true);
             
             // 异步翻译
             const translated = await this.translateNews();
@@ -477,10 +484,14 @@ class TradingAdvisorV2 {
             
             newsContainer.innerHTML = `
                 <div class="v2-news-toggle">
-                    <button class="v2-btn-toggle" onclick="window.v2Assistant.renderNews(true)">🔤 显示原文</button>
+                    <button class="v2-btn-toggle" id="v2-toggle-lang">🔤 显示原文</button>
                 </div>
                 ${newsHtml}
             `;
+            
+            // 翻译完成后重新绑定事件监听器
+            const btnAfter = document.getElementById("v2-toggle-lang");
+            if (btnAfter) btnAfter.onclick = () => this.renderNews(true);
         }
     }
 
