@@ -1,13 +1,14 @@
-{
+﻿{
   "manifest_version": 3,
   "name": "IBKR Trading Assistant",
   "version": "2.0",
-  "description": "Real-time trading strategy assistant for IBKR Portal with V2 Advanced Features",
+  "description": "Real-time trading strategy assistant for IBKR Portal",
   "background": {
     "service_worker": "background.js"
   },
   "permissions": [
-    "storage",`n    "notifications"
+    "storage",
+    "notifications"
   ],
   "host_permissions": [
     "*://interactivebrokers.com.au/*",

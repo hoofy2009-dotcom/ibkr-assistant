@@ -639,13 +639,15 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
 
         try {
             // 并行获取多个数据源
-            const [calendarData, metricsData, financialsData] = await Promise.all([
+            const [calendarData, metricsData, financialsData, peersData] = await Promise.all([
                 // 1. 财报日历
                 fetch(`https://finnhub.io/api/v1/calendar/earnings?symbol=${symbol}&token=${apiKey}`).then(r => r.json()),
                 // 2. 关键财务指标
                 fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${symbol}&metric=all&token=${apiKey}`).then(r => r.json()),
                 // 3. 财务报表 (最近季度)
-                fetch(`https://finnhub.io/api/v1/stock/financials-reported?symbol=${symbol}&token=${apiKey}`).then(r => r.json())
+                fetch(`https://finnhub.io/api/v1/stock/financials-reported?symbol=${symbol}&token=${apiKey}`).then(r => r.json()),
+                // 4. 同行业公司列表
+                fetch(`https://finnhub.io/api/v1/stock/peers?symbol=${symbol}&token=${apiKey}`).then(r => r.json()).catch(() => [])
             ]);
 
             let html = '<div class="v2-earnings-enhanced">';
@@ -657,10 +659,26 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                 const epsEstimate = earnings.epsEstimate;
                 const surprise = epsActual && epsEstimate ? ((epsActual - epsEstimate) / Math.abs(epsEstimate) * 100).toFixed(1) : null;
                 
+                // 【新增】财报倒计时
+                const earningsDate = new Date(earnings.date);
+                const today = new Date();
+                const daysUntil = Math.ceil((earningsDate - today) / (1000 * 60 * 60 * 24));
+                let countdownHtml = '';
+                if (earnings.date && !epsActual) { // 只在未公布时显示倒计时
+                    if (daysUntil === 0) {
+                        countdownHtml = `<div style="grid-column:1/-1;text-align:center;background:#ff9800;color:#fff;padding:8px;border-radius:5px;font-weight:bold;">🔥 今日财报 🔥</div>`;
+                    } else if (daysUntil > 0 && daysUntil <= 3) {
+                        countdownHtml = `<div style="grid-column:1/-1;text-align:center;background:#f44336;color:#fff;padding:6px;border-radius:5px;">⚠️ 距离财报 <b>${daysUntil}天</b> ⚠️</div>`;
+                    } else if (daysUntil > 3 && daysUntil <= 30) {
+                        countdownHtml = `<div style="grid-column:1/-1;color:#666;text-align:center;">📅 距离财报 ${daysUntil}天</div>`;
+                    }
+                }
+                
                 html += `
                     <div class="v2-earnings-section">
                         <div class="v2-section-title">📅 财报日历</div>
                         <div class="v2-earnings-grid">
+                            ${countdownHtml}
                             <div>日期: <b>${earnings.date || 'TBA'}</b></div>
                             <div>EPS预期: <b>$${earnings.epsEstimate || 'N/A'}</b></div>
                             ${epsActual ? `<div>EPS实际: <b style="color:${surprise > 0 ? '#4caf50' : '#f44336'}">$${epsActual}</b></div>` : ''}
@@ -708,6 +726,65 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                         </div>
                     </div>
                 `;
+
+                // 【新增】同行业对比
+                if (peersData && peersData.length > 0) {
+                    // 获取同行业指标 (最多前5个同行)
+                    const peerSymbols = peersData.slice(0, 5).filter(p => p !== symbol);
+                    const peerMetricsPromises = peerSymbols.map(peer =>
+                        fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${peer}&metric=all&token=${apiKey}`)
+                            .then(r => r.json())
+                            .catch(() => null)
+                    );
+
+                    const peerMetrics = await Promise.all(peerMetricsPromises);
+                    const validPeers = peerMetrics.filter(pm => pm && pm.metric);
+
+                    if (validPeers.length > 0) {
+                        // 计算行业平均
+                        const peerPEs = validPeers.map(pm => pm.metric.peNormalizedAnnual).filter(v => v && v > 0);
+                        const peerROEs = validPeers.map(pm => pm.metric.roaeTTM).filter(v => v);
+
+                        const avgPE = peerPEs.length > 0 ? peerPEs.reduce((a, b) => a + b) / peerPEs.length : null;
+                        const avgROE = peerROEs.length > 0 ? (peerROEs.reduce((a, b) => a + b) / peerROEs.length * 100) : null;
+
+                        const myPE = m.peNormalizedAnnual;
+                        const myROE = m.roaeTTM ? m.roaeTTM * 100 : null;
+
+                        html += `
+                            <div class="v2-earnings-section">
+                                <div class="v2-section-title">🏢 同行业对比</div>
+                                <div class="v2-earnings-grid">
+                                    ${myPE && avgPE ? `
+                                        <div>
+                                            P/E: <b>${myPE.toFixed(2)}</b>
+                                            <br><span style="font-size:10px;color:#999">
+                                                行业均值: ${avgPE.toFixed(2)} 
+                                                <span style="color:${myPE > avgPE ? '#f44336' : '#4caf50'}">
+                                                    ${myPE > avgPE ? '偏高' : '偏低'} ${Math.abs(((myPE - avgPE) / avgPE * 100)).toFixed(1)}%
+                                                </span>
+                                            </span>
+                                        </div>
+                                    ` : ''}
+                                    ${myROE && avgROE ? `
+                                        <div>
+                                            ROE: <b>${myROE.toFixed(1)}%</b>
+                                            <br><span style="font-size:10px;color:#999">
+                                                行业均值: ${avgROE.toFixed(1)}% 
+                                                <span style="color:${myROE > avgROE ? '#4caf50' : '#f44336'}">
+                                                    ${myROE > avgROE ? '优于' : '弱于'} 行业 ${Math.abs(myROE - avgROE).toFixed(1)}%
+                                                </span>
+                                            </span>
+                                        </div>
+                                    ` : ''}
+                                    <div style="grid-column:1/-1;font-size:10px;color:#999;margin-top:5px;">
+                                        对比同行: ${peerSymbols.slice(0, 3).join(', ')}${peerSymbols.length > 3 ? ' 等' : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
             } else {
                 html += `<div class="v2-earnings-section"><div class="v2-section-title">💰 财务指标</div><div>数据加载失败或不可用</div></div>`;
             }
