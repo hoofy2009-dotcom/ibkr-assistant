@@ -2626,31 +2626,66 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 const changeStr = sign + changeP.toFixed(2) + "%";
                 
                 // --- 做T策略信号逻辑（Watchlist）---
-                // 基于日内涨跌判断低吸高抛机会
+                // 基于日内涨跌 + ATR波动率判断低吸高抛机会
                 let action = "观望";
                 let actionColor = "#555";
                 let actionReason = "涨跌幅在正常波动范围内";
+                let volatilityAlert = ""; // 波动率横幅警告
                 
+                // 计算ATR波动率（如果数据足够）
+                const cachedData = this.watchlistCache.get(sym);
+                let atr = 0;
+                let volatilityLevel = "正常"; // 正常/剧烈/极端
+                
+                if (cachedData && cachedData.history && cachedData.history.length >= 14) {
+                    atr = this.calculateATR(cachedData.history, 14);
+                    const atrPercent = (atr / price) * 100; // ATR占股价的百分比
+                    
+                    if (atrPercent > 3.0) {
+                        volatilityLevel = "极端";
+                        volatilityAlert = `\u26A0\uFE0F 波动极端(ATR ${atrPercent.toFixed(1)}%)`;
+                    } else if (atrPercent > 1.5) {
+                        volatilityLevel = "剧烈";
+                        volatilityAlert = `\u{1F4CA} 波动剧烈(ATR ${atrPercent.toFixed(1)}%)`;
+                    }
+                }
+                
+                // 结合涨跌幅和波动率给出做T信号
                 if (changeP >= 2.5) { 
-                    action = "\u{1F4C9}卖出"; // 📉 使用Unicode转义
+                    action = "\u{1F4C9}卖出"; // 📉
                     actionColor = "#f44336"; // Red
                     actionReason = `日内涨幅${changeP.toFixed(2)}%，高位卖出做T，等待回调再接`;
+                    if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
+                        actionReason += `\n${volatilityAlert} - 向上波动加速，卖出获利窗口`;
+                    }
                 } else if (changeP >= 1.0) {
-                    action = "\u{1F4E4}减仓"; // 📤 使用Unicode转义
+                    action = "\u{1F4E4}减仓"; // 📤
                     actionColor = "#ff9800"; // Orange
                     actionReason = `日内涨幅${changeP.toFixed(2)}%，部分获利了结，保留底仓`;
+                    if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
+                        actionReason += `\n${volatilityAlert} - 波动放大，建议部分锁利`;
+                    }
                 } else if (changeP <= -3.0) {
-                    action = "\u{1F4E5}收筹"; // 📥 使用Unicode转义
+                    action = "\u{1F4E5}收筹"; // 📥
                     actionColor = "#4caf50"; // Green
                     actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，低位收筹码，分批建仓`;
+                    if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
+                        actionReason += `\n${volatilityAlert} - 向下波动加剧，分批抄底良机`;
+                    }
                 } else if (changeP <= -1.5) {
-                    action = "\u2705买入"; // ✅ 使用Unicode转义
+                    action = "\u2705买入"; // ✅
                     actionColor = "#66bb6a"; // Light Green
                     actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，回调到位，适合低吸做T`;
+                    if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
+                        actionReason += `\n${volatilityAlert} - 下跌波动放大，低吸做T窗口`;
+                    }
                 } else if (changeP > -0.5 && changeP < 0.5) {
-                    action = "\u{1F504}观察"; // 🔄 使用Unicode转义
+                    action = "\u{1F504}观察"; // 🔄
                     actionColor = "#9e9e9e"; // Gray
                     actionReason = "价格窄幅震荡，等待明确方向";
+                    if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
+                        actionReason += `\n${volatilityAlert} - 警惕即将突破`;
+                    }
                 }
 
                 // 1. Update Modal UI
