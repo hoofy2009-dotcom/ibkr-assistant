@@ -1161,32 +1161,41 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
         
         // 构建增强提示词 - V2 深度分析版本
         const prompt = `
-            作为**资深量化分析师 + 基本面研究员**，请对 ${this.state.symbol} 进行深度分析：
+            作为**首席投资官(CIO)**，请对 ${this.state.symbol} 进行深度分析：
             
-            【技术面】（量化信号）
-            - RSI(14): ${rsi.toFixed(2)} ${rsi < 30 ? '(超卖区)' : rsi > 70 ? '(超买区)' : '(中性)'}
-            - MACD: ${macd.histogram.toFixed(3)} ${macd.histogram > 0 ? '(多头趋势)' : '(空头趋势)'}
-            - ATR(14): ${atr.toFixed(2)} (波动率指标)
+            【技术面数据】(量化信号 - 权重40%)
+            - RSI(14): ${rsi.toFixed(2)} ${rsi < 30 ? '(超卖区 - 潜在反弹)' : rsi > 70 ? '(超买区 - 警惕回调)' : '(中性区)'}
+            - MACD: ${macd.histogram.toFixed(3)} ${macd.histogram > 0 ? '(多头趋势 - 金叉信号)' : '(空头趋势 - 死叉信号)'}
+            - ATR(14): ${atr.toFixed(2)} (波动率 ${(atr/this.state.price*100).toFixed(1)}%)
             - 当前价: $${this.state.price.toFixed(2)}
-            - 建议止损: $${(this.state.price - atr * 2).toFixed(2)} (基于 2×ATR)
+            - 技术止损位: $${(this.state.price - atr * 2).toFixed(2)} (基于 2×ATR)
             
-            【基本面】（新闻情报）
-            最近7天新闻：${newsText}
+            【基本面情报】(新闻情绪 - 权重25%)
+            最近7天新闻标题：${newsText}
             
-            【催化剂】（财报预期）
+            【催化剂事件】(财报预期 - 权重35%)
             ${earningsText}
             
-            【分析要求】
-            1. **技术+基本面结合**：不要只看技术指标，必须考虑新闻情绪和财报催化剂
-            2. **明确操作建议**：BUY（买入）/ SELL（卖出）/ HOLD（观望）
-            3. **风险量化**：1-10分（1=极低风险, 10=极高风险）
-            4. **止损/目标位**：基于 ATR 和新闻情绪综合判断
-            5. **简洁有力**：150字以内，突出核心逻辑
+            【分析要求】(多维度综合评估)
+            1. **技术+基本面结合**：不要只看技术指标,必须考虑新闻情绪和财报催化剂
+            2. **多空双向思考**：同时列出看涨理由(bull case)和看跌理由(bear case),然后权衡
+            3. **概率评估**：用"60%概率上涨"而非"必涨",置信度要诚实(0.5-0.7为常态)
+            4. **风险量化**：1-10分(5-6=中等风险, 7-8=中高风险, 9-10=极端风险)
+            5. **止损/目标位**：基于 ATR 和新闻情绪综合判断,给出具体数字
+            6. **简洁有力**：150字以内,突出核心逻辑(技术信号+基本面支撑+情绪催化)
             
-            **核心差异点**：
-            - 如果新闻偏空但技术指标超卖 → 可能是"利空出尽"反弹机会
-            - 如果财报即将公布且预期良好 → 增加持有信心
-            - 如果技术指标超买且新闻炒作过度 → 警惕回调风险
+            【经典信号识别】(交叉验证)
+            • RSI<30 + 正面新闻 + 低P/E = 强买入信号(confidence>0.75)
+            • RSI>70 + 负面新闻 + 高P/E = 强卖出信号(confidence>0.75)
+            • 财报前3天 + 不确定性高 → HOLD观望(risk↑, confidence↓)
+            • 新闻炒作过度 + 技术背离 → 警惕反转(risk=8-9)
+            • 单一维度信号 → 降低置信度(多维度确认才能高置信)
+            
+            【常见陷阱警示】(避免踩坑)
+            ❌ 单纯看RSI超卖就买入 → 可能继续跌(falling knife - 接飞刀)
+            ❌ 只看新闻利好就追涨 → 可能利好兑现后暴跌(buy the rumor, sell the news)
+            ❌ 忽视波动率风险 → ATR过高时止损容易被扫
+            ✅ 多维度交叉验证 → 技术+基本面+情绪三重确认后再下结论
             
             返回JSON格式（不要Markdown代码块）：
             {
@@ -1195,7 +1204,7 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                 "stopLoss": 数字,
                 "target": 数字,
                 "risk": 1-10,
-                "reason": "综合技术面+基本面的核心理由",
+                "reason": "核心理由(150字内,含技术+基本面+情绪三维度)",
                 "newsImpact": "positive|negative|neutral",
                 "earningsRisk": "high|medium|low"
             }
@@ -1220,11 +1229,37 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                 body: JSON.stringify({
                     model: "deepseek-chat",
                     messages: [
-                        { role: "system", content: "你是专业量化分析师，返回有效JSON。" },
+                        { 
+                            role: "system", 
+                            content: `你是华尔街顶级对冲基金的首席投资官(CIO),拥有15年实战经验。
+
+【核心能力】
+• 技术分析: 精通动量指标(RSI/MACD)、波动率(ATR)、趋势判断
+• 基本面分析: 财报解读、估值模型(P/E/PEG)、行业对比、盈利能力(ROE/ROA)
+• 情绪分析: 新闻情报解读、市场情绪、催化剂识别
+• 风险管理: VaR模型、压力测试、动态止损、仓位优化
+
+【分析框架】(必须遵循)
+1. 多空双向思考: 同时列出看涨理由+看跌理由,然后权衡概率
+2. 概率思维: 不要绝对化,用"65%概率上涨"而非"必涨"
+3. 风险优先: 先评估"能亏多少",再考虑"能赚多少"
+4. 数据驱动: 每个结论必须有数据支撑,避免主观臆断
+
+【评估维度权重】
+• 技术面(40%): RSI超买超卖、MACD金叉死叉、ATR波动率
+• 基本面(35%): P/E估值水平、ROE盈利能力、财报预期
+• 情绪面(25%): 新闻正负面、市场热度、催化剂
+
+【输出标准】
+• 置信度诚实: 0.5-0.7为常态,>0.8需极强信号(技术+基本面+情绪三重确认)
+• 风险评分保守: 5-6为中等风险,7-8为中高风险,9-10为极端风险
+• 理由详实: 150字内,突出核心逻辑+数据证据(技术+基本面+情绪三维度)
+• 返回纯JSON(无markdown标记)` 
+                        },
                         { role: "user", content: prompt }
                     ],
                     temperature: 0.4,
-                    max_tokens: 300
+                    max_tokens: 400
                 })
             });
 
@@ -1232,6 +1267,47 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
             let result = data.choices[0].message.content;
             result = result.replace(/```json/g, "").replace(/```/g, "").trim();
             const analysis = JSON.parse(result);
+
+            // === 置信度智能校准 (避免AI过度自信) ===
+            let calibrationNote = "";
+            
+            // 1. 高风险环境降低置信度
+            if (analysis.confidence > 0.8 && analysis.risk >= 7) {
+                analysis.confidence = Math.min(analysis.confidence, 0.75);
+                calibrationNote += " [高风险降信]";
+            }
+            
+            // 2. 数据不足降低置信度
+            if (newsText.includes("暂无") || earningsText.includes("暂无")) {
+                analysis.confidence *= 0.85;
+                calibrationNote += " [数据不足]";
+            }
+            
+            // 3. 极端波动率警告
+            const volatilityRatio = (atr / this.state.price) * 100;
+            if (volatilityRatio > 5) {
+                analysis.risk = Math.max(analysis.risk, 8);
+                calibrationNote += " [极端波动]";
+            }
+            
+            // 4. 技术指标冲突降低置信度
+            const rsiOverbought = rsi > 70;
+            const rsiOversold = rsi < 30;
+            const macdBullish = macd.histogram > 0;
+            
+            if ((rsiOverbought && macdBullish && analysis.action === 'SELL') ||
+                (rsiOversold && !macdBullish && analysis.action === 'BUY')) {
+                analysis.confidence *= 0.9;
+                calibrationNote += " [信号冲突]";
+            }
+            
+            // 5. 限制置信度范围 (0.3-0.9)
+            analysis.confidence = Math.max(0.3, Math.min(0.9, analysis.confidence));
+            
+            // 6. 添加校准说明到理由
+            if (calibrationNote) {
+                analysis.reason += calibrationNote;
+            }
 
             // 新闻情绪图标
             const newsEmoji = {

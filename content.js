@@ -1383,7 +1383,29 @@ class TradingAssistant {
             const buildOAIBody = (model) => ({
                 model,
                 messages: [
-                    { role: "system", content: "你是一位资深对冲基金经理。请用中文回答，并只返回有效的 JSON 格式。You are a Hedge Fund Manager. Reply in Chinese and return ONLY valid JSON." },
+                    { 
+                        role: "system", 
+                        content: `你是顶级量化交易员,专注日内价格行为分析(Intraday Trading)。
+
+【核心能力】
+• 快速识别: 支撑/阻力位、关键价格区间
+• 动量捕捉: RSI背离、MACD金叉死叉、快速反转
+• 波动率: ATR突破、Bollinger Band挤压
+• 做T时机: 区间高抛低吸、突破追踪
+
+【交易原则】
+1. 速度优先: 决策快、执行快、止损快
+2. 点位精确: 进出场价格误差±0.5美元
+3. 风险严控: 单笔最大回撤2-3%
+4. 信号明确: 多模型共识才操作
+
+【输出要求】
+• 操作建议: BUY/SELL/HOLD(必须明确)
+• 进场点位: 精确到小数点后2位
+• 止损位: 严格基于ATR(2-2.5倍)
+• 理由简洁: 50字内,突出关键信号
+• 返回纯JSON(无markdown)` 
+                    },
                     { role: "user", content: prompt }
                 ],
                 temperature: 0.4,
@@ -1432,7 +1454,10 @@ class TradingAssistant {
                             body: JSON.stringify({
                                 model: "deepseek-chat",
                                 messages: [
-                                    {"role": "system", "content": "你是一位资深对冲基金经理。请用中文回答，并只返回有效的 JSON 格式。"},
+                                    {
+                                        "role": "system", 
+                                        "content": "你是顶级量化交易员,专注日内价格行为。输出要求: 操作明确(BUY/SELL/HOLD)、点位精确(±0.5$)、止损严格(2-3% ATR)、理由简洁(50字)。返回纯JSON,无markdown。"
+                                    },
                                     {"role": "user", "content": prompt}
                                 ],
                                 temperature: 0.4,
@@ -1514,7 +1539,7 @@ class TradingAssistant {
                          
                          console.log(`[IBKR AI] Gemini Try: ${mid} (${ver})`);
                          const response = await runViaBackground(url, null, {
-                                contents: [{ parts: [{ text: "You are a Hedge Fund Manager. Return ONLY valid JSON. " + prompt }] }]
+                                contents: [{ parts: [{ text: "你是顶级量化交易员,专注日内交易。返回纯JSON(BUY/SELL/HOLD,精确点位,严格止损,简洁理由50字)。" + prompt }] }]
                          }, 15000);
 
                          if (response && response.candidates && response.candidates.length) {
