@@ -1,4 +1,4 @@
-﻿{
+{
   "manifest_version": 3,
   "name": "IBKR Trading Assistant",
   "version": "2.0",
@@ -7,7 +7,7 @@
     "service_worker": "background.js"
   },
   "permissions": [
-    "storage"
+    "storage",`n    "notifications"
   ],
   "host_permissions": [
     "*://interactivebrokers.com.au/*",

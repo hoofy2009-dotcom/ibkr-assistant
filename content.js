@@ -26,6 +26,18 @@ class TradingAssistant {
         this.watchlistHistory = new Map(); // symbol -> {history: [], lastUpdate: timestamp}
         this.watchlistUpdateTimer = null;
 
+        // 技术指标趋势追踪
+        this.indicatorHistory = {
+            rsi: [],
+            macd: [],
+            lastRSI: null,
+            lastMACD: null
+        };
+
+        // 通知去重
+        this.lastNotifications = new Map(); // key -> timestamp
+        this.notificationCooldown = 300000; // 5分钟冷却期
+
         // API keys (stored locally via chrome.storage)
         this.apiKeys = {
             deepseekKey: "",
@@ -893,16 +905,22 @@ class TradingAssistant {
         if (this.state.history.length >= 14) {
             const rsi = this.calculateRSI(this.state.history, 14);
             const rsiEl = document.getElementById("assist-rsi");
-            if (rsiEl) rsiEl.innerText = rsi.toFixed(2);
+            
+            // 计算趋势箭头
+            const rsiTrend = this.calculateIndicatorTrend('rsi', rsi);
+            if (rsiEl) rsiEl.innerText = `${rsi.toFixed(2)} ${rsiTrend}`;
             
             const rsiSignal = document.getElementById("assist-rsi-signal");
             if (rsiSignal) {
                 if (rsi < 30) {
                     rsiSignal.innerText = "超卖";
                     rsiSignal.style.color = "#4caf50";
+                    // 检查是否需要推送通知
+                    this.checkTradingSignalNotification("RSI超卖", `${this.state.symbol} RSI=${rsi.toFixed(1)}, 可能反弹机会`, "low");
                 } else if (rsi > 70) {
                     rsiSignal.innerText = "超买";
                     rsiSignal.style.color = "#f44336";
+                    this.checkTradingSignalNotification("RSI超买", `${this.state.symbol} RSI=${rsi.toFixed(1)}, 可能回调风险`, "high");
                 } else {
                     rsiSignal.innerText = "中性";
                     rsiSignal.style.color = "#999";
@@ -917,16 +935,21 @@ class TradingAssistant {
         if (this.state.history.length >= 26) {
             const macd = this.calculateMACD(this.state.history);
             const macdEl = document.getElementById("assist-macd");
-            if (macdEl) macdEl.innerText = macd.histogram.toFixed(3);
+            
+            // 计算趋势箭头
+            const macdTrend = this.calculateIndicatorTrend('macd', macd.histogram);
+            if (macdEl) macdEl.innerText = `${macd.histogram.toFixed(3)} ${macdTrend}`;
             
             const macdSignal = document.getElementById("assist-macd-signal");
             if (macdSignal) {
                 if (macd.histogram > 0 && macd.prev < 0) {
                     macdSignal.innerText = "金叉";
                     macdSignal.style.color = "#4caf50";
+                    this.checkTradingSignalNotification("MACD金叉", `${this.state.symbol} 出现金叉信号，看涨`, "low");
                 } else if (macd.histogram < 0 && macd.prev > 0) {
                     macdSignal.innerText = "死叉";
                     macdSignal.style.color = "#f44336";
+                    this.checkTradingSignalNotification("MACD死叉", `${this.state.symbol} 出现死叉信号，看跌`, "high");
                 } else {
                     macdSignal.innerText = macd.histogram > 0 ? "多头" : "空头";
                     macdSignal.style.color = "#999";
@@ -2950,6 +2973,112 @@ class TradeExecutor {
         }
 
         return newInterval;
+    }
+
+    // 计算技术指标趋势箭头
+    calculateIndicatorTrend(indicator, currentValue) {
+        if (!this.indicatorHistory[indicator]) {
+            this.indicatorHistory[indicator] = [];
+        }
+
+        const history = this.indicatorHistory[indicator];
+        history.push(currentValue);
+
+        // 保持最近5个数据点
+        if (history.length > 5) {
+            history.shift();
+        }
+
+        // 至少需要3个点才能判断趋势
+        if (history.length < 3) {
+            return ""; // 无趋势
+        }
+
+        // 计算斜率（简化版：比较最近3个点的平均变化）
+        const recent3 = history.slice(-3);
+        const slope = (recent3[2] - recent3[0]) / 2;
+
+        const threshold = indicator === 'rsi' ? 2 : 0.002; // RSI阈值2, MACD阈值0.002
+
+        if (slope > threshold) {
+            return "\u2197\uFE0F"; // ↗️ 上升
+        } else if (slope < -threshold) {
+            return "\u2198\uFE0F"; // ↘️ 下降
+        } else {
+            return "\u27A1\uFE0F"; // ➡️ 横盘
+        }
+    }
+
+    // 做T信号智能推送
+    checkTradingSignalNotification(title, message, priority = "medium") {
+        // 检查用户是否启用通知
+        if (!this.settings.notificationsEnabled) return;
+
+        // 防止重复通知（5分钟冷却）
+        const key = `${title}-${this.state.symbol}`;
+        const lastTime = this.lastNotifications.get(key);
+        const now = Date.now();
+
+        if (lastTime && (now - lastTime) < this.notificationCooldown) {
+            return; // 冷却期内，跳过
+        }
+
+        // 只推送重要信号
+        if (priority === "low") {
+            // 低优先级：涨跌幅≥2%或ATR>3%时才推送
+            const changeP = this.state.lastPrice > 0 ? 
+                Math.abs((this.state.price - this.state.lastPrice) / this.state.lastPrice * 100) : 0;
+            const atr = this.state.history.length >= 14 ? this.calculateATR(this.state.history, 14) : 0;
+            const atrPercent = this.state.price > 0 ? (atr / this.state.price) * 100 : 0;
+
+            if (changeP < 2.0 && atrPercent < 3.0) {
+                return; // 波动不够大，不推送
+            }
+        }
+
+        // 发送Chrome通知
+        if (chrome && chrome.notifications) {
+            chrome.notifications.create({
+                type: 'basic',
+                iconUrl: 'icon128.png',
+                title: `📊 ${title}`,
+                message: message,
+                priority: priority === "high" ? 2 : 1,
+                requireInteraction: priority === "high" // 高优先级需要用户手动关闭
+            });
+
+            // 记录通知时间
+            this.lastNotifications.set(key, now);
+
+            // 播放提示音（简单的beep）
+            if (priority === "high") {
+                this.playNotificationSound();
+            }
+        }
+    }
+
+    // 播放通知音效
+    playNotificationSound() {
+        try {
+            // 使用Web Audio API生成简单的提示音
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = priority === "high" ? 800 : 600; // 高音或低音
+            oscillator.type = 'sine';
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.3);
+        } catch (e) {
+            console.log("Audio notification not supported");
+        }
     }
 }
 
