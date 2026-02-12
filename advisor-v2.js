@@ -484,8 +484,8 @@ class TradingAdvisorV2 {
             if (data && data.length > 0) {
                 // 保存原始新闻数据
                 this.newsData = data.slice(0, 5);
-                // 【新增】异步分析新闻情绪
-                this.analyzeNewsSentiment();
+                // 【修复】等待异步情绪分析完成
+                await this.analyzeNewsSentiment();
                 this.renderNews(false); // 初始显示中文翻译
             } else {
                 document.getElementById("v2-news").innerHTML = "暂无新闻";
@@ -533,7 +533,16 @@ class TradingAdvisorV2 {
                     </div>
                     ${collapseBtnHtml}
                 `;
-                // 绑定事件
+                // 【修复】重新绑定折叠按钮事件
+                const newCollapseBtn = titleEl.querySelector('.v2-collapse-btn');
+                if (newCollapseBtn) {
+                    newCollapseBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        const section = newCollapseBtn.getAttribute('data-section');
+                        this.toggleSection(section, newCollapseBtn);
+                    };
+                }
+                // 绑定语言切换按钮事件
                 const btn = document.getElementById('v2-news-lang-btn');
                 if (btn) btn.onclick = () => this.renderNews(false);
             }
@@ -564,7 +573,16 @@ class TradingAdvisorV2 {
                     </div>
                     ${collapseBtnHtml}
                 `;
-                // 绑定事件
+                // 【修复】重新绑定折叠按钮事件
+                const newCollapseBtn = titleEl.querySelector('.v2-collapse-btn');
+                if (newCollapseBtn) {
+                    newCollapseBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        const section = newCollapseBtn.getAttribute('data-section');
+                        this.toggleSection(section, newCollapseBtn);
+                    };
+                }
+                // 绑定语言切换按钮事件
                 const btn = document.getElementById('v2-news-lang-btn');
                 if (btn) btn.onclick = () => this.renderNews(true);
             }
