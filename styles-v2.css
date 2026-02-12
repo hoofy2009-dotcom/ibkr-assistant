@@ -177,6 +177,31 @@
     font-size: 9px;
 }
 
+/* 新闻翻译切换 */
+.v2-news-toggle {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.v2-btn-toggle {
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    color: #00d4ff;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+    transition: all 0.2s;
+}
+
+.v2-btn-toggle:hover {
+    background: rgba(0, 212, 255, 0.2);
+    border-color: #00d4ff;
+}
+
 /* 财报盒子 */
 .v2-earnings-box {
     color: #ccc;

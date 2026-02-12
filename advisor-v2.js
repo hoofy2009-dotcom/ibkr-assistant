@@ -6,6 +6,7 @@ console.log("🚀 IBKR Assistant V2: Script loaded!");
 class TradingAdvisorV2 {
     constructor() {
         this.panel = null;
+        this.minimizedBtn = null;
         this.state = {
             symbol: "",
             price: 0,
@@ -14,6 +15,9 @@ class TradingAdvisorV2 {
             trades: [], // 交易日志
             lastUrl: ""
         };
+        
+        this.newsData = []; // 原始新闻数据
+        this.translatedNews = null; // 缓存的翻译结果
         
         this.apiKeys = {};
         this.settings = {
@@ -417,13 +421,9 @@ class TradingAdvisorV2 {
             const data = await response.json();
             
             if (data && data.length > 0) {
-                const newsHtml = data.slice(0, 5).map(item => `
-                    <div class="v2-news-item">
-                        <div class="v2-news-title">${item.headline}</div>
-                        <div class="v2-news-meta">${new Date(item.datetime * 1000).toLocaleDateString()} | ${item.source}</div>
-                    </div>
-                `).join("");
-                document.getElementById("v2-news").innerHTML = newsHtml;
+                // 保存原始新闻数据
+                this.newsData = data.slice(0, 5);
+                this.renderNews(false); // 初始显示中文翻译
             } else {
                 document.getElementById("v2-news").innerHTML = "暂无新闻";
             }
@@ -431,6 +431,126 @@ class TradingAdvisorV2 {
             console.error("Finnhub news error:", e);
             document.getElementById("v2-news").innerHTML = "新闻加载失败";
         }
+    }
+
+    // 渲染新闻（支持中英文切换）
+    async renderNews(showOriginal = false) {
+        if (!this.newsData || this.newsData.length === 0) {
+            document.getElementById("v2-news").innerHTML = "暂无新闻";
+            return;
+        }
+
+        const newsContainer = document.getElementById("v2-news");
+        
+        if (showOriginal) {
+            // 显示原文
+            const newsHtml = this.newsData.map(item => `
+                <div class="v2-news-item">
+                    <div class="v2-news-title">${item.headline}</div>
+                    <div class="v2-news-meta">${new Date(item.datetime * 1000).toLocaleDateString()} | ${item.source}</div>
+                </div>
+            `).join("");
+            newsContainer.innerHTML = `
+                <div class="v2-news-toggle">
+                    <button class="v2-btn-toggle" onclick="window.v2Assistant.renderNews(false)">🌐 显示中文</button>
+                </div>
+                ${newsHtml}
+            `;
+        } else {
+            // 显示翻译按钮和加载状态
+            newsContainer.innerHTML = `
+                <div class="v2-news-toggle">
+                    <button class="v2-btn-toggle" onclick="window.v2Assistant.renderNews(true)">🔤 显示原文</button>
+                </div>
+                <div style="text-align:center; color:#aaa; padding:20px;">翻译中...</div>
+            `;
+            
+            // 异步翻译
+            const translated = await this.translateNews();
+            
+            const newsHtml = this.newsData.map((item, index) => `
+                <div class="v2-news-item">
+                    <div class="v2-news-title">${translated[index] || item.headline}</div>
+                    <div class="v2-news-meta">${new Date(item.datetime * 1000).toLocaleDateString()} | ${item.source}</div>
+                </div>
+            `).join("");
+            
+            newsContainer.innerHTML = `
+                <div class="v2-news-toggle">
+                    <button class="v2-btn-toggle" onclick="window.v2Assistant.renderNews(true)">🔤 显示原文</button>
+                </div>
+                ${newsHtml}
+            `;
+        }
+    }
+
+    // 使用 AI 翻译新闻标题
+    async translateNews() {
+        // 检查是否有缓存的翻译
+        if (this.translatedNews && this.translatedNews.symbol === this.state.symbol) {
+            return this.translatedNews.titles;
+        }
+
+        const headlines = this.newsData.map(item => item.headline);
+        const translated = [];
+
+        try {
+            // 获取 V1 的 DeepSeek API Key
+            const v1Keys = await this.getV1ApiKeys();
+            const apiKey = v1Keys.deepseekKey;
+            
+            if (!apiKey) {
+                console.warn("No DeepSeek API Key, returning original headlines");
+                return headlines;
+            }
+
+            // 批量翻译（一次性翻译所有标题）
+            const prompt = `请将以下英文新闻标题翻译成中文。保持简洁专业，不要添加额外内容。
+每行一个标题的翻译结果，用换行符分隔。
+
+标题列表：
+${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
+
+翻译结果（每行一个，不要序号）：`;
+
+            const response = await fetch("https://api.deepseek.com/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        { role: "system", content: "你是专业翻译，将英文新闻标题简洁准确地翻译成中文。" },
+                        { role: "user", content: prompt }
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 500
+                })
+            });
+
+            const data = await response.json();
+            const result = data.choices[0].message.content.trim();
+            
+            // 解析翻译结果
+            const lines = result.split('\n').filter(line => line.trim());
+            for (let i = 0; i < headlines.length; i++) {
+                translated.push(lines[i] || headlines[i]);
+            }
+
+            // 缓存翻译结果
+            this.translatedNews = {
+                symbol: this.state.symbol,
+                titles: translated
+            };
+
+        } catch (e) {
+            console.error("Translation error:", e);
+            return headlines; // 翻译失败则返回原文
+        }
+
+        return translated;
     }
 
     // === 财报日历 (Finnhub) ===
@@ -742,7 +862,9 @@ class TradingAdvisorV2 {
 const startV2Assistant = () => {
     if (!document.querySelector('.ibkr-assistant-v2-panel')) {
         console.log("✅ Starting IBKR Assistant V2...");
-        new TradingAdvisorV2();
+        const v2Instance = new TradingAdvisorV2();
+        // 设置全局引用，方便按钮调用
+        window.v2Assistant = v2Instance;
     }
 };
 
