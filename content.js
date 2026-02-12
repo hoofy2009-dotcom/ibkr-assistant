@@ -2632,13 +2632,12 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 let actionReason = "涨跌幅在正常波动范围内";
                 let volatilityAlert = ""; // 波动率横幅警告
                 
-                // 计算ATR波动率（如果数据足够）
-                const cachedData = this.watchlistCache.get(sym);
+                // 计算ATR波动率（仅对当前正在监控的symbol，因为只有它有历史数据）
                 let atr = 0;
                 let volatilityLevel = "正常"; // 正常/剧烈/极端
                 
-                if (cachedData && cachedData.history && cachedData.history.length >= 14) {
-                    atr = this.calculateATR(cachedData.history, 14);
+                if (sym === this.state.symbol && this.state.history && this.state.history.length >= 14) {
+                    atr = this.calculateATR(this.state.history, 14);
                     const atrPercent = (atr / price) * 100; // ATR占股价的百分比
                     
                     if (atrPercent > 3.0) {
