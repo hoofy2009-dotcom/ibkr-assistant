@@ -424,6 +424,8 @@ class TradingAdvisorV2 {
             if (data && data.length > 0) {
                 // 保存原始新闻数据
                 this.newsData = data.slice(0, 5);
+                // 【新增】异步分析新闻情绪
+                this.analyzeNewsSentiment();
                 this.renderNews(false); // 初始显示中文翻译
             } else {
                 document.getElementById("v2-news").innerHTML = "暂无新闻";
@@ -487,18 +489,42 @@ class TradingAdvisorV2 {
             // 异步翻译
             const translated = await this.translateNews();
             
-            const newsHtml = this.newsData.map((item, index) => `
-                <div class="v2-news-item v2-news-clickable" data-url="${item.url || '#'}">
-                    <div class="v2-news-title">${translated[index] || item.headline}</div>
-                    <div class="v2-news-meta">${new Date(item.datetime * 1000).toLocaleDateString()} | ${item.source}</div>
+            // 【新增】情绪emoji映射
+            const sentimentEmojis = {
+                'positive': '😊',
+                'neutral': '😐',
+                'negative': '😢'
+            };
+            
+            const newsHtml = this.newsData.map((item, index) => {
+                const sentiment = this.newsSentiments && this.newsSentiments[index] ? this.newsSentiments[index] : 'neutral';
+                const emoji = sentimentEmojis[sentiment];
+                return `
+                    <div class="v2-news-item v2-news-clickable" data-url="${item.url || '#'}">
+                        <div class="v2-news-title">${emoji} ${translated[index] || item.headline}</div>
+                        <div class="v2-news-meta">${new Date(item.datetime * 1000).toLocaleDateString()} | ${item.source}</div>
+                    </div>
+                `;
+            }).join("");
+            
+            // 【新增】情绪统计
+            const sentimentCounts = {
+                positive: (this.newsSentiments || []).filter(s => s === 'positive').length,
+                neutral: (this.newsSentiments || []).filter(s => s === 'neutral').length,
+                negative: (this.newsSentiments || []).filter(s => s === 'negative').length
+            };
+            const sentimentSummary = `
+                <div style="font-size:11px;color:#999;text-align:center;padding:5px;border-top:1px solid #eee;margin-top:5px;">
+                    最近7天情绪: ${sentimentCounts.positive}条😊 ${sentimentCounts.neutral}条😐 ${sentimentCounts.negative}条😢
                 </div>
-            `).join("");
+            `;
             
             newsContainer.innerHTML = `
                 <div class="v2-news-toggle">
                     <button class="v2-btn-toggle" id="v2-toggle-lang">🔤 显示原文</button>
                 </div>
                 ${newsHtml}
+                ${sentimentSummary}
             `;
             
             // 翻译完成后重新绑定事件监听器
@@ -555,6 +581,66 @@ class TradingAdvisorV2 {
                 newsContainer.scrollTop = 0;
             }
         }, 50); // 50ms = 每秒滚动20px
+    }
+
+    // 【新增】新闻情绪分析
+    async analyzeNewsSentiment() {
+        if (!this.newsData || this.newsData.length === 0) {
+            this.newsSentiments = [];
+            return;
+        }
+
+        try {
+            const v1Keys = await this.getV1ApiKeys();
+            const apiKey = v1Keys.deepseekKey;
+            
+            if (!apiKey) {
+                console.warn("No DeepSeek API Key for sentiment analysis");
+                this.newsSentiments = this.newsData.map(() => 'neutral');
+                return;
+            }
+
+            const headlines = this.newsData.map(item => item.headline);
+            const prompt = `判断以下新闻标题的情绪(positive/neutral/negative)。
+只返回5个单词，用空格分隔，顺序对应标题顺序。
+
+标题列表：
+${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
+
+情绪结果(只返回5个单词,例如: positive neutral negative positive neutral):`;
+
+            const response = await fetch("https://api.deepseek.com/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        { role: "system", content: "你是情绪分析专家。只返回positive/neutral/negative三个单词之一，不要任何额外内容。" },
+                        { role: "user", content: prompt }
+                    ],
+                    temperature: 0.1,
+                    max_tokens: 50
+                })
+            });
+
+            const data = await response.json();
+            const result = data.choices[0].message.content.trim().toLowerCase();
+            const sentiments = result.split(/\s+/).slice(0, this.newsData.length);
+            
+            // 保存情绪结果
+            this.newsSentiments = sentiments.map(s => {
+                if (s.includes('positive')) return 'positive';
+                if (s.includes('negative')) return 'negative';
+                return 'neutral';
+            });
+
+        } catch (e) {
+            console.error("Sentiment analysis error:", e);
+            this.newsSentiments = this.newsData.map(() => 'neutral');
+        }
     }
 
     // 使用 AI 翻译新闻标题
@@ -674,6 +760,28 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                     }
                 }
                 
+                // 【新增】历史财报表现 - 提取过去4个季度的惊喜率
+                const historicalEarnings = calendarData.earningsCalendar
+                    .filter(e => e.epsActual && e.epsEstimate)
+                    .slice(0, 4)
+                    .reverse(); // 从旧到新排列
+                
+                let historyHtml = '';
+                if (historicalEarnings.length > 0) {
+                    const historyItems = historicalEarnings.map((e, idx) => {
+                        const surprise = ((e.epsActual - e.epsEstimate) / Math.abs(e.epsEstimate) * 100).toFixed(1);
+                        const color = surprise > 0 ? '#4caf50' : '#f44336';
+                        const quarter = `Q${historicalEarnings.length - idx}`;
+                        return `<span style="color:${color};font-weight:bold;">${quarter}: ${surprise > 0 ? '+' : ''}${surprise}%</span>`;
+                    }).join(' | ');
+                    
+                    historyHtml = `
+                        <div style="grid-column:1/-1;font-size:11px;padding:8px;background:#f5f5f5;border-radius:5px;margin-top:5px;">
+                            <b>📈 历史财报表现:</b> ${historyItems}
+                        </div>
+                    `;
+                }
+                
                 html += `
                     <div class="v2-earnings-section">
                         <div class="v2-section-title">📅 财报日历</div>
@@ -684,6 +792,7 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                             ${epsActual ? `<div>EPS实际: <b style="color:${surprise > 0 ? '#4caf50' : '#f44336'}">$${epsActual}</b></div>` : ''}
                             ${surprise ? `<div>EPS惊喜: <b style="color:${surprise > 0 ? '#4caf50' : '#f44336'}">${surprise > 0 ? '+' : ''}${surprise}%</b></div>` : ''}
                             <div>营收预期: <b>${earnings.revenueEstimate ? '$' + (earnings.revenueEstimate / 1e9).toFixed(2) + 'B' : 'N/A'}</b></div>
+                            ${historyHtml}
                         </div>
                     </div>
                 `;
