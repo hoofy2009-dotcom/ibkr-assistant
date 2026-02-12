@@ -2628,9 +2628,15 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                         const data = JSON.parse(raw);
                         if (!data.chart || !data.chart.result) return null;
                         const meta = data.chart.result[0].meta;
+                        
+                        // 确定当前最佳价格（优先使用盘后/盘前价格）
+                        let currentPrice = meta.regularMarketPrice;
+                        if (meta.postMarketPrice) currentPrice = meta.postMarketPrice;
+                        else if (meta.preMarketPrice) currentPrice = meta.preMarketPrice;
+                        
                         return { 
                             symbol: sym, 
-                            regularMarketPrice: meta.regularMarketPrice, 
+                            regularMarketPrice: currentPrice,
                             previousClose: meta.chartPreviousClose || meta.previousClose 
                         };
                     })
