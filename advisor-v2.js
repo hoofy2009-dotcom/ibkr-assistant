@@ -1,7 +1,7 @@
-// IBKR Trading Assistant V2 - Advanced Professional Edition
-// 独立于 V1，提供更专业的交易分析功能
+// IBKR Trading Assistant - 智囊团 (深度分析战略家)
+// 与闪电侠并行运行，提供多维度交易分析功能
 
-console.log("🚀 IBKR Assistant V2: Script loaded!");
+console.log("🧠 智囊团: Script loaded!");
 
 class TradingAdvisorV2 {
     constructor() {
@@ -30,7 +30,7 @@ class TradingAdvisorV2 {
     }
 
     async init() {
-        console.log("📊 IBKR Assistant V2 Initializing...");
+        console.log("🧠 智囊团 Initializing...");
         await this.loadSettings();
         this.createPanel();
         this.startMonitoring();
@@ -55,7 +55,7 @@ class TradingAdvisorV2 {
         this.panel.className = "ibkr-assistant-v2-panel";
         this.panel.innerHTML = `
             <div class="ibkr-v2-header">
-                <span class="ibkr-v2-title">🚀 智能顾问 V2 (Pro)</span>
+                <span class="ibkr-v2-title">🧠 智囊团</span>
                 <div>
                     <button class="ibkr-v2-minimize" title="最小化">_</button>
                     <button class="ibkr-v2-close" title="关闭">✕</button>
@@ -110,14 +110,14 @@ class TradingAdvisorV2 {
                 </div>
 
                 <!-- 设置按钮 -->
-                <button id="v2-settings" class="v2-btn-settings">⚙️ V2 设置</button>
+                <button id="v2-settings" class="v2-btn-settings">⚙️ 设置</button>
             </div>
 
             <!-- 设置模态框 -->
             <div id="v2-settings-modal" class="v2-modal" style="display:none;">
                 <div class="v2-modal-content">
                     <div class="v2-modal-header">
-                        <span>V2 设置</span>
+                        <span>智囊团设置</span>
                         <button class="v2-modal-close">✕</button>
                     </div>
                     <div class="v2-modal-body">
@@ -313,7 +313,7 @@ class TradingAdvisorV2 {
             assist_v2_keys: this.apiKeys 
         }, () => {
             this.toggleSettings();
-            this.showToast("✅ V2 设置已保存", "success");
+            this.showToast("✅ 设置已保存", "success");
             // 重新加载新闻和财报
             if (this.state.symbol) {
                 this.fetchNews(this.state.symbol);

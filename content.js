@@ -1,4 +1,4 @@
-// IBKR Trading Assistant - Professional Edition
+// IBKR Trading Assistant - 闪电侠 (快速日内交易专家)
 
 class TradingAssistant {
     constructor() {
@@ -216,7 +216,7 @@ class TradingAssistant {
         this.panel.className = "ibkr-assistant-panel";
         this.panel.innerHTML = `
             <div class="ibkr-assistant-header" id="ibkr-drag-handle">
-                <span class="ibkr-assistant-title">🤖 智能投顾 (HedgeFund AI)</span>
+                <span class="ibkr-assistant-title">🏃 闪电侠</span>
                 <div>
                    <button class="icon-btn" id="ibkr-watchlist" title="Watchlist">📋</button>
                    <button class="icon-btn" id="ibkr-settings" title="Settings">⚙</button>
