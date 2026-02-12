@@ -18,8 +18,13 @@ class TradingAssistant {
             isDragging: false,
             minimized: false,
             lastDomScan: 0,
-            lastDomPrice: 0
+            lastDomPrice: 0,
+            updateInterval: 20000 // 默认20秒，可动态调整
         };
+
+        // 性能优化：Watchlist历史数据追踪
+        this.watchlistHistory = new Map(); // symbol -> {history: [], lastUpdate: timestamp}
+        this.watchlistUpdateTimer = null;
 
         // API keys (stored locally via chrome.storage)
         this.apiKeys = {
@@ -36,6 +41,13 @@ class TradingAssistant {
                 doubaoModel: AI_CONFIG.DOUBAO_MODEL,
                 geminiModel: "gemini-3-pro-preview"
             };
+        
+        // 用户设置
+        this.settings = {
+            updateMode: "auto", // auto/fast/normal/slow
+            notificationsEnabled: true
+        };
+        
         // Remote quote cache per symbol { price, session, ts }
         this.remoteQuoteCache = {};
 
@@ -108,6 +120,9 @@ class TradingAssistant {
         // Watchlist loop
         this.updateWatchlistData(); // Initial fetch immediately
         setInterval(() => this.updateWatchlistData(), 15000); // Update WL every 15s
+        
+        // Watchlist历史数据追踪 (每分钟更新一次，节省API)
+        this.startWatchlistHistoryTracking();
     }
 
     async loadSettings() {
@@ -2632,13 +2647,32 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 let actionReason = "涨跌幅在正常波动范围内";
                 let volatilityAlert = ""; // 波动率横幅警告
                 
-                // 计算ATR波动率（仅对当前正在监控的symbol，因为只有它有历史数据）
+                // 计算ATR波动率 - 优先使用Watchlist历史数据
                 let atr = 0;
                 let volatilityLevel = "正常"; // 正常/剧烈/极端
                 
-                if (sym === this.state.symbol && this.state.history && this.state.history.length >= 14) {
+                // 尝试从Watchlist历史数据获取ATR
+                const watchlistData = this.watchlistHistory.get(sym);
+                let hasATR = false;
+                
+                if (watchlistData && watchlistData.history && watchlistData.history.length >= 14) {
+                    // 使用Watchlist专属历史数据
+                    atr = this.calculateATR(watchlistData.history, 14);
+                    const atrPercent = (atr / price) * 100;
+                    hasATR = true;
+                    
+                    if (atrPercent > 3.0) {
+                        volatilityLevel = "极端";
+                        volatilityAlert = `\u26A0\uFE0F 波动极端(ATR ${atrPercent.toFixed(1)}%)`;
+                    } else if (atrPercent > 1.5) {
+                        volatilityLevel = "剧烈";
+                        volatilityAlert = `\u{1F4CA} 波动剧烈(ATR ${atrPercent.toFixed(1)}%)`;
+                    }
+                } else if (sym === this.state.symbol && this.state.history && this.state.history.length >= 14) {
+                    // Fallback: 如果是当前监控symbol，使用主历史数据
                     atr = this.calculateATR(this.state.history, 14);
-                    const atrPercent = (atr / price) * 100; // ATR占股价的百分比
+                    const atrPercent = (atr / price) * 100;
+                    hasATR = true;
                     
                     if (atrPercent > 3.0) {
                         volatilityLevel = "极端";
@@ -2837,6 +2871,85 @@ class TradeExecutor {
             console.warn(msg);
             this.app.updateAiPopup(`<div style="color:orange">${msg}</div>`, "AutoTrade Algo", false);
         }
+    }
+
+    // === 性能优化：Watchlist历史数据追踪 ===
+    startWatchlistHistoryTracking() {
+        // 每60秒更新一次Watchlist所有symbol的历史数据
+        this.watchlistUpdateTimer = setInterval(async () => {
+            const symbols = this.watchlist || [];
+            if (symbols.length === 0) return;
+
+            console.log(`📊 Updating watchlist history for ${symbols.length} symbols`);
+            
+            for (const symbol of symbols) {
+                try {
+                    // 获取当前价格
+                    const quote = await this.fetchYahooQuote(symbol);
+                    if (!quote || !quote.regularMarketPrice) continue;
+
+                    const price = quote.regularMarketPrice;
+                    
+                    // 初始化或获取历史数据
+                    if (!this.watchlistHistory.has(symbol)) {
+                        this.watchlistHistory.set(symbol, {
+                            history: [],
+                            lastUpdate: Date.now()
+                        });
+                    }
+
+                    const data = this.watchlistHistory.get(symbol);
+                    data.history.push(price);
+                    
+                    // 保持最近14个数据点(足够计算ATR)
+                    if (data.history.length > 14) {
+                        data.history.shift();
+                    }
+                    
+                    data.lastUpdate = Date.now();
+                    
+                } catch (e) {
+                    console.error(`Failed to update history for ${symbol}:`, e);
+                }
+            }
+        }, 60000); // 每60秒更新一次
+    }
+
+    // 智能调整更新频率
+    adjustUpdateInterval() {
+        const changeP = Math.abs(((this.state.price - this.state.lastPrice) / this.state.lastPrice) * 100);
+        const atr = this.state.history.length >= 14 ? this.calculateATR(this.state.history, 14) : 0;
+        const atrPercent = this.state.price > 0 ? (atr / this.state.price) * 100 : 0;
+
+        let newInterval = 20000; // 默认20秒
+
+        if (this.settings.updateMode === "fast") {
+            newInterval = 10000; // 强制10秒
+        } else if (this.settings.updateMode === "slow") {
+            newInterval = 30000; // 强制30秒
+        } else if (this.settings.updateMode === "auto") {
+            // 自动模式：根据波动率动态调整
+            if (atrPercent > 3.0 || changeP > 2.0) {
+                // 剧烈波动：10秒快速模式
+                newInterval = 10000;
+            } else if (changeP < 0.5 && atrPercent < 1.0) {
+                // 横盘整理：30秒节能模式
+                newInterval = 30000;
+            } else {
+                // 正常波动：20秒标准模式
+                newInterval = 20000;
+            }
+        }
+
+        // 只在需要时更新interval
+        if (newInterval !== this.state.updateInterval) {
+            console.log(`⚡ Update interval adjusted: ${this.state.updateInterval/1000}s → ${newInterval/1000}s (ATR: ${atrPercent.toFixed(2)}%)`);
+            this.state.updateInterval = newInterval;
+            
+            // 重启主循环定时器（这里需要在updateData中调用）
+        }
+
+        return newInterval;
     }
 }
 
