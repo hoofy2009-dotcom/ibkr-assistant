@@ -572,28 +572,212 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
             return;
         }
 
+        const box = document.getElementById("v2-earnings");
+        box.innerHTML = "加载财报数据中...";
+
         try {
-            const url = `https://finnhub.io/api/v1/calendar/earnings?symbol=${symbol}&token=${apiKey}`;
-            const response = await fetch(url);
-            const data = await response.json();
-            
-            if (data && data.earningsCalendar && data.earningsCalendar.length > 0) {
-                const earnings = data.earningsCalendar[0];
-                const html = `
-                    <div class="v2-earnings-item">
-                        <div>📅 日期: <b>${earnings.date || 'TBA'}</b></div>
-                        <div>💰 EPS 预期: <b>${earnings.epsEstimate || 'N/A'}</b></div>
-                        <div>📊 营收预期: <b>${earnings.revenueEstimate || 'N/A'}</b></div>
+            // 并行获取多个数据源
+            const [calendarData, metricsData, financialsData] = await Promise.all([
+                // 1. 财报日历
+                fetch(`https://finnhub.io/api/v1/calendar/earnings?symbol=${symbol}&token=${apiKey}`).then(r => r.json()),
+                // 2. 关键财务指标
+                fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${symbol}&metric=all&token=${apiKey}`).then(r => r.json()),
+                // 3. 财务报表 (最近季度)
+                fetch(`https://finnhub.io/api/v1/stock/financials-reported?symbol=${symbol}&token=${apiKey}`).then(r => r.json())
+            ]);
+
+            let html = '<div class="v2-earnings-enhanced">';
+
+            // === 1. 财报日历 ===
+            if (calendarData && calendarData.earningsCalendar && calendarData.earningsCalendar.length > 0) {
+                const earnings = calendarData.earningsCalendar[0];
+                const epsActual = earnings.epsActual;
+                const epsEstimate = earnings.epsEstimate;
+                const surprise = epsActual && epsEstimate ? ((epsActual - epsEstimate) / Math.abs(epsEstimate) * 100).toFixed(1) : null;
+                
+                html += `
+                    <div class="v2-earnings-section">
+                        <div class="v2-section-title">📅 财报日历</div>
+                        <div class="v2-earnings-grid">
+                            <div>日期: <b>${earnings.date || 'TBA'}</b></div>
+                            <div>EPS预期: <b>$${earnings.epsEstimate || 'N/A'}</b></div>
+                            ${epsActual ? `<div>EPS实际: <b style="color:${surprise > 0 ? '#4caf50' : '#f44336'}">$${epsActual}</b></div>` : ''}
+                            ${surprise ? `<div>EPS惊喜: <b style="color:${surprise > 0 ? '#4caf50' : '#f44336'}">${surprise > 0 ? '+' : ''}${surprise}%</b></div>` : ''}
+                            <div>营收预期: <b>${earnings.revenueEstimate ? '$' + (earnings.revenueEstimate / 1e9).toFixed(2) + 'B' : 'N/A'}</b></div>
+                        </div>
                     </div>
                 `;
-                document.getElementById("v2-earnings").innerHTML = html;
             } else {
-                document.getElementById("v2-earnings").innerHTML = "暂无财报数据";
+                html += `<div class="v2-earnings-section"><div class="v2-section-title">📅 财报日历</div><div>暂无即将公布的财报</div></div>`;
             }
+
+            // === 2. 关键财务指标 ===
+            if (metricsData && metricsData.metric) {
+                const m = metricsData.metric;
+                const series = metricsData.series;
+                
+                html += `
+                    <div class="v2-earnings-section">
+                        <div class="v2-section-title">💰 关键财务指标</div>
+                        <div class="v2-earnings-grid">
+                            ${m.peNormalizedAnnual ? `<div>P/E: <b>${m.peNormalizedAnnual.toFixed(2)}</b> <span style="font-size:10px;color:#999">${this.interpretPE(m.peNormalizedAnnual)}</span></div>` : ''}
+                            ${m.pbAnnual ? `<div>P/B: <b>${m.pbAnnual.toFixed(2)}</b> <span style="font-size:10px;color:#999">${this.interpretPB(m.pbAnnual)}</span></div>` : ''}
+                            ${m.roaeTTM ? `<div>ROE: <b>${(m.roaeTTM * 100).toFixed(1)}%</b> <span style="font-size:10px;color:#999">${this.interpretROE(m.roaeTTM * 100)}</span></div>` : ''}
+                            ${m.roaTTM ? `<div>ROA: <b>${(m.roaTTM * 100).toFixed(1)}%</b> <span style="font-size:10px;color:#999">${this.interpretROA(m.roaTTM * 100)}</span></div>` : ''}
+                            ${m.currentRatioAnnual ? `<div>流动比率: <b>${m.currentRatioAnnual.toFixed(2)}</b> <span style="font-size:10px;color:#999">${this.interpretCurrentRatio(m.currentRatioAnnual)}</span></div>` : ''}
+                            ${m.totalDebt_totalEquityAnnual ? `<div>资产负债率: <b>${m.totalDebt_totalEquityAnnual.toFixed(2)}</b> <span style="font-size:10px;color:#999">${this.interpretDebtRatio(m.totalDebt_totalEquityAnnual)}</span></div>` : ''}
+                            ${m.grossMarginAnnual ? `<div>毛利率: <b>${m.grossMarginAnnual.toFixed(1)}%</b> <span style="font-size:10px;color:#999">${this.interpretGrossMargin(m.grossMarginAnnual)}</span></div>` : ''}
+                            ${m.operatingMarginAnnual ? `<div>营业利润率: <b>${m.operatingMarginAnnual.toFixed(1)}%</b> <span style="font-size:10px;color:#999">${this.interpretOperatingMargin(m.operatingMarginAnnual)}</span></div>` : ''}
+                        </div>
+                    </div>
+                `;
+
+                // 财务健康度评分
+                const healthScore = this.calculateFinancialHealth(m);
+                html += `
+                    <div class="v2-earnings-section">
+                        <div class="v2-section-title">🏥 财务健康度</div>
+                        <div class="v2-health-score">
+                            <div class="v2-health-bar">
+                                <div class="v2-health-fill" style="width:${healthScore.score * 10}%; background:${this.getHealthColor(healthScore.score)}"></div>
+                            </div>
+                            <div style="margin-top:5px;"><b>${healthScore.score}/10</b> - ${healthScore.label}</div>
+                            <div style="font-size:11px;color:#999;margin-top:3px;">${healthScore.reason}</div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                html += `<div class="v2-earnings-section"><div class="v2-section-title">💰 财务指标</div><div>数据加载失败或不可用</div></div>`;
+            }
+
+            html += '</div>';
+            box.innerHTML = html;
+
         } catch (e) {
             console.error("Finnhub earnings error:", e);
-            document.getElementById("v2-earnings").innerHTML = "财报数据加载失败";
+            box.innerHTML = `<div style="color:#f44336;">财报数据加载失败: ${e.message}</div>`;
         }
+    }
+
+    // === 财务指标解读函数 ===
+    interpretPE(pe) {
+        if (pe < 15) return "估值偏低";
+        if (pe < 25) return "合理估值";
+        if (pe < 40) return "估值偏高";
+        return "高估值风险";
+    }
+
+    interpretPB(pb) {
+        if (pb < 1) return "破净值";
+        if (pb < 3) return "合理";
+        return "溢价较高";
+    }
+
+    interpretROE(roe) {
+        if (roe > 20) return "优秀";
+        if (roe > 15) return "良好";
+        if (roe > 10) return "一般";
+        return "偏弱";
+    }
+
+    interpretROA(roa) {
+        if (roa > 10) return "优秀";
+        if (roa > 5) return "良好";
+        return "一般";
+    }
+
+    interpretCurrentRatio(ratio) {
+        if (ratio > 2) return "流动性充足";
+        if (ratio > 1) return "流动性健康";
+        return "流动性风险";
+    }
+
+    interpretDebtRatio(ratio) {
+        if (ratio < 0.5) return "负债低";
+        if (ratio < 1) return "负债合理";
+        if (ratio < 2) return "负债偏高";
+        return "高杠杆风险";
+    }
+
+    interpretGrossMargin(margin) {
+        if (margin > 50) return "高毛利";
+        if (margin > 30) return "健康";
+        return "偏低";
+    }
+
+    interpretOperatingMargin(margin) {
+        if (margin > 20) return "盈利能力强";
+        if (margin > 10) return "盈利健康";
+        return "盈利承压";
+    }
+
+    // 计算财务健康度综合评分 (0-10分)
+    calculateFinancialHealth(metrics) {
+        let score = 0;
+        let factors = [];
+
+        // ROE (权重25%)
+        if (metrics.roaeTTM) {
+            const roe = metrics.roaeTTM * 100;
+            if (roe > 20) { score += 2.5; factors.push("ROE优秀"); }
+            else if (roe > 15) { score += 2; factors.push("ROE良好"); }
+            else if (roe > 10) { score += 1.5; }
+            else { factors.push("ROE偏弱"); }
+        }
+
+        // 流动比率 (权重20%)
+        if (metrics.currentRatioAnnual) {
+            if (metrics.currentRatioAnnual > 2) { score += 2; factors.push("流动性充足"); }
+            else if (metrics.currentRatioAnnual > 1) { score += 1.5; factors.push("流动性健康"); }
+            else { factors.push("流动性风险"); }
+        }
+
+        // 资产负债率 (权重20%)
+        if (metrics.totalDebt_totalEquityAnnual) {
+            if (metrics.totalDebt_totalEquityAnnual < 0.5) { score += 2; factors.push("低负债"); }
+            else if (metrics.totalDebt_totalEquityAnnual < 1) { score += 1.5; }
+            else if (metrics.totalDebt_totalEquityAnnual < 2) { score += 1; }
+            else { factors.push("高杠杆"); }
+        }
+
+        // 毛利率 (权重15%)
+        if (metrics.grossMarginAnnual) {
+            if (metrics.grossMarginAnnual > 50) { score += 1.5; factors.push("高毛利"); }
+            else if (metrics.grossMarginAnnual > 30) { score += 1; }
+        }
+
+        // 营业利润率 (权重20%)
+        if (metrics.operatingMarginAnnual) {
+            if (metrics.operatingMarginAnnual > 20) { score += 2; factors.push("盈利能力强"); }
+            else if (metrics.operatingMarginAnnual > 10) { score += 1.5; }
+            else { factors.push("盈利承压"); }
+        }
+
+        // 评级标签
+        let label = "";
+        let reason = "";
+        if (score >= 8) {
+            label = "财务健康 💪";
+            reason = factors.slice(0, 2).join(", ") + " - 基本面扎实";
+        } else if (score >= 6) {
+            label = "财务良好 👍";
+            reason = factors.slice(0, 2).join(", ");
+        } else if (score >= 4) {
+            label = "财务一般 ⚠️";
+            reason = "存在" + factors.filter(f => f.includes("风险") || f.includes("承压") || f.includes("偏弱")).join(", ");
+        } else {
+            label = "财务风险 ⚠️";
+            reason = "多项指标偏弱，谨慎投资";
+        }
+
+        return { score: Math.min(score, 10), label, reason };
+    }
+
+    getHealthColor(score) {
+        if (score >= 8) return "#4caf50"; // Green
+        if (score >= 6) return "#8bc34a"; // Light Green
+        if (score >= 4) return "#ff9800"; // Orange
+        return "#f44336"; // Red
     }
 
     // === AI 深度分析 ===

@@ -207,10 +207,74 @@
     color: #ccc;
     font-size: 11px;
     line-height: 1.6;
+    max-height: 300px;
+    overflow-y: auto;
 }
 
 .v2-earnings-item div {
     margin-bottom: 4px;
+}
+
+/* 增强财报样式 */
+.v2-earnings-enhanced {
+    font-size: 11px;
+    color: #ccc;
+}
+
+.v2-earnings-section {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.v2-earnings-section:last-child {
+    border-bottom: none;
+}
+
+.v2-section-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #00d4ff;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+}
+
+.v2-earnings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    font-size: 10px;
+}
+
+.v2-earnings-grid div {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 4px 6px;
+    border-radius: 3px;
+}
+
+.v2-earnings-grid b {
+    color: #fff;
+    margin-left: 4px;
+}
+
+.v2-health-score {
+    font-size: 11px;
+}
+
+.v2-health-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 6px 0;
+}
+
+.v2-health-fill {
+    height: 100%;
+    transition: width 0.5s ease;
+    border-radius: 4px;
 }
 
 /* AI 分析 */
