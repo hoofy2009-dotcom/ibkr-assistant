@@ -92,6 +92,47 @@
     margin-bottom: 8px;
     border-bottom: 1px solid rgba(0, 212, 255, 0.2);
     padding-bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* 折叠按钮 */
+.v2-collapse-btn {
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    color: #00d4ff;
+    padding: 2px 6px;
+    font-size: 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.v2-collapse-btn:hover {
+    background: rgba(0, 212, 255, 0.2);
+}
+
+/* 可折叠区域 */
+.v2-collapsible-section {
+    display: block;
+}
+
+/* 小按钮样式（标题区） */
+.v2-btn-toggle-small {
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    color: #00d4ff;
+    padding: 2px 8px;
+    font-size: 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-left: 5px;
+    transition: all 0.2s;
+}
+
+.v2-btn-toggle-small:hover {
+    background: rgba(0, 212, 255, 0.2);
 }
 
 /* 信息行 */
@@ -155,6 +196,15 @@
     color: #ccc;
     font-size: 11px;
     scroll-behavior: smooth; /* 平滑滚动 */
+}
+
+/* 紧凑新闻列表（只显示2条） */
+.v2-news-list-compact {
+    max-height: 100px;
+    overflow-y: auto;
+    color: #ccc;
+    font-size: 11px;
+    scroll-behavior: smooth;
 }
 
 .v2-news-item {
