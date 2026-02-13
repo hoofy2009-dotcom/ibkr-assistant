@@ -61,6 +61,35 @@
     color: #fff;
 }
 
+/* 大盘指数区域 */
+.v2-macro-ribbon {
+    background: linear-gradient(90deg, rgba(15, 52, 96, 0.8) 0%, rgba(22, 33, 62, 0.8) 100%);
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.3);
+    font-size: 11px;
+}
+
+.v2-macro-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.v2-macro-label {
+    color: #aaa;
+    font-size: 10px;
+}
+
+.v2-macro-value {
+    color: #fff;
+    font-weight: bold;
+    font-size: 12px;
+}
+
 .ibkr-v2-content {
     padding: 12px;
     overflow-y: auto;

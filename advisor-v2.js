@@ -19,6 +19,7 @@ class TradingAdvisorV2 {
         
         this.newsData = []; // 原始新闻数据
         this.translatedNews = null; // 缓存的翻译结果
+        this.macroCache = null; // 大盘指数缓存
         
         this.apiKeys = {};
         this.settings = {
@@ -37,6 +38,10 @@ class TradingAdvisorV2 {
         this.loadTradeJournal();
         // 【新增】恢复折叠状态
         setTimeout(() => this.restoreCollapsedStates(), 500);
+        
+        // 【新增】获取大盘指数数据
+        this.fetchMacroData();
+        setInterval(() => this.fetchMacroData(), 60000); // 每分钟更新
     }
 
     async loadSettings() {
@@ -59,6 +64,22 @@ class TradingAdvisorV2 {
                 <div>
                     <button class="ibkr-v2-minimize" title="最小化">_</button>
                     <button class="ibkr-v2-close" title="关闭">✕</button>
+                </div>
+            </div>
+            
+            <!-- 大盘指数 -->
+            <div class="v2-macro-ribbon" id="v2-macro-ribbon">
+                <div class="v2-macro-item">
+                    <span class="v2-macro-label">道琼斯</span>
+                    <span class="v2-macro-value" id="v2-dji-value">加载中...</span>
+                </div>
+                <div class="v2-macro-item">
+                    <span class="v2-macro-label">纳斯达克</span>
+                    <span class="v2-macro-value" id="v2-nasdaq-value">加载中...</span>
+                </div>
+                <div class="v2-macro-item">
+                    <span class="v2-macro-label">标普500</span>
+                    <span class="v2-macro-value" id="v2-spy-value">加载中...</span>
                 </div>
             </div>
             
@@ -1159,9 +1180,25 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
         const earningsBox = document.getElementById("v2-earnings");
         const earningsText = earningsBox.innerText || "暂无财报信息";
         
+        // 【新增】收集大盘指数数据
+        let marketContext = "大盘数据加载中...";
+        if (this.macroCache) {
+            const { dji, nasdaq, spy } = this.macroCache;
+            const parts = [];
+            if (dji) parts.push(`道琼斯${dji.fmt}`);
+            if (nasdaq) parts.push(`纳斯达克${nasdaq.fmt}`);
+            if (spy) parts.push(`标普500 ${spy.fmt}`);
+            marketContext = parts.join(" | ");
+        }
+        
         // 构建增强提示词 - V2 深度分析版本
         const prompt = `
             作为**首席投资官(CIO)**，请对 ${this.state.symbol} 进行深度分析：
+            
+            【大盘环境】(市场背景 - 权重30%)
+            今日美股三大指数表现: ${marketContext}
+            ${this.macroCache && this.macroCache.spy && this.macroCache.spy.changePct < -1 ? '⚠️ 大盘承压，个股操作需谨慎' : ''}
+            ${this.macroCache && this.macroCache.spy && this.macroCache.spy.changePct > 1 ? '✅ 大盘强势，有利于个股表现' : ''}
             
             【技术面数据】(量化信号 - 权重40%)
             - RSI(14): ${rsi.toFixed(2)} ${rsi < 30 ? '(超卖区 - 潜在反弹)' : rsi > 70 ? '(超买区 - 警惕回调)' : '(中性区)'}
@@ -1520,6 +1557,115 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
             toast.style.transition = "opacity 0.3s";
             setTimeout(() => toast.remove(), 300);
         }, 2000);
+    }
+
+    // 【新增】代理 Fetch 方法（通过 background.js 绕过 CORS）
+    async proxyFetch(url) {
+        return new Promise((resolve, reject) => {
+            try {
+                if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+                    return reject(new Error("Extension Context Invalid"));
+                }
+
+                chrome.runtime.sendMessage({ action: "FETCH_DATA", url: url }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        return reject(new Error(chrome.runtime.lastError.message));
+                    }
+                    
+                    if (response && response.success) {
+                        resolve(response.data);
+                    } else {
+                        const msg = response ? response.error : "Unknown Background Error";
+                        reject(new Error(msg));
+                    }
+                });
+            } catch(e) { 
+                reject(e instanceof Error ? e : new Error(String(e))); 
+            }
+        });
+    }
+
+    // 【新增】获取单个股票/指数数据
+    async fetchTickerData(symbol) {
+        try {
+            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=2d`);
+            const data = JSON.parse(rawText);
+            const result = data.chart?.result?.[0];
+            if (!result) return null;
+            
+            const meta = result.meta;
+            let price = meta.regularMarketPrice;
+            const prevClose = meta.chartPreviousClose || meta.previousClose;
+            
+            if (price == null) {
+                const quotes = result.indicators.quote[0].close;
+                const valid = quotes.filter(c => c != null);
+                if (valid.length) price = valid[valid.length - 1];
+            }
+            
+            if (price != null && prevClose) {
+                const changePct = ((price - prevClose) / prevClose) * 100;
+                return { 
+                    symbol, 
+                    price, 
+                    changePct, 
+                    fmt: `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%`,
+                    color: changePct >= 0 ? "#4caf50" : "#ff5252"
+                };
+            }
+            return null;
+        } catch (e) {
+            console.warn(`Failed to fetch ${symbol}`, e);
+            return null;
+        }
+    }
+
+    // 【新增】获取大盘指数数据
+    async fetchMacroData() {
+        // 避免频繁请求，5分钟缓存
+        if (this.macroCache && (Date.now() - this.macroCache.ts < 300000)) return;
+        
+        try {
+            const [dji, nasdaq, spy] = await Promise.all([
+                this.fetchTickerData("^DJI"),   // 道琼斯工业平均指数
+                this.fetchTickerData("^IXIC"),  // 纳斯达克综合指数
+                this.fetchTickerData("SPY")     // 标普500 ETF
+            ]);
+
+            this.macroCache = { 
+                dji,
+                nasdaq,
+                spy,
+                ts: Date.now() 
+            };
+            
+            // 更新 UI
+            const djiEl = document.getElementById("v2-dji-value");
+            const nasdaqEl = document.getElementById("v2-nasdaq-value");
+            const spyEl = document.getElementById("v2-spy-value");
+            
+            if (djiEl && dji) {
+                djiEl.innerHTML = `<span style="color:${dji.color}">${dji.fmt}</span>`;
+                djiEl.title = `当前: ${dji.price.toFixed(2)}`;
+            }
+            
+            if (nasdaqEl && nasdaq) {
+                nasdaqEl.innerHTML = `<span style="color:${nasdaq.color}">${nasdaq.fmt}</span>`;
+                nasdaqEl.title = `当前: ${nasdaq.price.toFixed(2)}`;
+            }
+            
+            if (spyEl && spy) {
+                spyEl.innerHTML = `<span style="color:${spy.color}">${spy.fmt}</span>`;
+                spyEl.title = `当前: ${spy.price.toFixed(2)}`;
+            }
+            
+        } catch(e) {
+            console.log("V2 Macro Fetch Err", e);
+            const ribbon = document.getElementById("v2-macro-ribbon");
+            if(ribbon) {
+                ribbon.innerHTML = `<div style='color:orange;font-size:10px;padding:4px;'>大盘数据加载失败: ${e.message}</div>`;
+            }
+        }
     }
 }
 
