@@ -3037,7 +3037,7 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
     }
 
-    // 2. 分析师评级和目标价（从Yahoo Finance网页爬取 - 完全免费）
+    // 2. 分析师评级和目标价（从Yahoo Finance API - 完全免费）
     async fetchAnalystRatings(symbol) {
         const cacheKey = `analyst_${symbol}`;
         const cached = this.analystCache?.[cacheKey];
@@ -3046,38 +3046,44 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
 
         try {
-            console.log("👔 从Yahoo Finance网页爬取分析师评级:", symbol);
+            console.log("👔 从Yahoo Finance API获取分析师评级:", symbol);
             
-            // 方法1: 尝试从analysis页面获取推荐评级
-            let recommendations = null;
-            try {
-                const analysisUrl = `https://finance.yahoo.com/quote/${symbol}/analysis`;
-                const html = await this.proxyFetch(analysisUrl);
-                recommendations = this.parseAnalystRecommendations(html);
-                console.log("👔 解析到推荐评级:", recommendations);
-            } catch (e) {
-                console.warn("👔 无法获取推荐评级:", e.message);
-            }
+            // 🎯 使用Yahoo的JSON API（避免CORS问题）
+            const apiUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=recommendationTrend,financialData`;
+            const jsonText = await this.proxyFetch(apiUrl);
+            const jsonData = JSON.parse(jsonText);
             
-            // 方法2: 从key-statistics页面获取目标价
-            let priceTargets = { targetLow: 0, targetHigh: 0, targetMean: 0 };
-            try {
-                const statsUrl = `https://finance.yahoo.com/quote/${symbol}/key-statistics`;
-                const statsHtml = await this.proxyFetch(statsUrl);
-                priceTargets = this.parsePriceTargets(statsHtml);
-                console.log("👔 解析到目标价:", priceTargets);
-            } catch (e) {
-                console.warn("👔 无法获取目标价:", e.message);
-            }
-            
-            // 如果没有获取到任何数据，返回默认值
-            if (!recommendations && !priceTargets.targetMean) {
-                console.warn("👔 Yahoo Finance无分析师数据");
+            const result = jsonData?.quoteSummary?.result?.[0];
+            if (!result) {
+                console.warn("👔 API返回空数据");
                 return this.getDefaultAnalystData();
             }
             
-            const result = {
-                // 评级分布（如果有）
+            // 解析推荐评级
+            const trend = result.recommendationTrend?.trend?.[0];
+            const recommendations = trend ? {
+                strongBuy: trend.strongBuy || 0,
+                buy: trend.buy || 0,
+                hold: trend.hold || 0,
+                sell: trend.sell || 0,
+                strongSell: trend.strongSell || 0
+            } : null;
+            
+            console.log("👔 解析到推荐评级:", recommendations);
+            
+            // 解析目标价
+            const financial = result.financialData;
+            const priceTargets = {
+                targetLow: financial?.targetLowPrice?.raw || 0,
+                targetHigh: financial?.targetHighPrice?.raw || 0,
+                targetMean: financial?.targetMeanPrice?.raw || 0
+            };
+            
+            console.log("👔 解析到目标价:", priceTargets);
+            
+            // 构造最终结果
+            const finalResult = {
+                // 评级分布
                 strongBuy: recommendations?.strongBuy || 0,
                 buy: recommendations?.buy || 0,
                 hold: recommendations?.hold || 0,
@@ -3089,10 +3095,10 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                     (recommendations.strongBuy + recommendations.buy + recommendations.hold + recommendations.sell + recommendations.strongSell) : 0,
                 
                 // 目标价
-                targetLow: priceTargets.targetLow || 0,
-                targetHigh: priceTargets.targetHigh || 0,
-                targetMean: priceTargets.targetMean || 0,
-                targetMedian: 0, // Yahoo不提供中位数
+                targetLow: priceTargets.targetLow,
+                targetHigh: priceTargets.targetHigh,
+                targetMean: priceTargets.targetMean,
+                targetMedian: 0,
                 
                 // 当前价
                 currentPrice: this.state.price || 0,
@@ -3102,205 +3108,39 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             };
 
             // 计算上行空间
-            if (result.targetMean && result.currentPrice) {
-                result.upside = (((result.targetMean - result.currentPrice) / result.currentPrice) * 100).toFixed(1);
+            if (finalResult.targetMean && finalResult.currentPrice) {
+                finalResult.upside = (((finalResult.targetMean - finalResult.currentPrice) / finalResult.currentPrice) * 100).toFixed(1);
             }
 
             // 综合评级倾向
             if (recommendations) {
-                const bullish = (result.strongBuy * 2 + result.buy);
-                const bearish = (result.strongSell * 2 + result.sell);
-                if (bullish > bearish * 1.5) result.consensus = "强烈买入";
-                else if (bullish > bearish) result.consensus = "买入";
-                else if (bearish > bullish * 1.5) result.consensus = "卖出";
-                else if (bearish > bullish) result.consensus = "减持";
-                else result.consensus = "持有";
+                const bullish = (finalResult.strongBuy * 2 + finalResult.buy);
+                const bearish = (finalResult.strongSell * 2 + finalResult.sell);
+                if (bullish > bearish * 1.5) finalResult.consensus = "强烈买入";
+                else if (bullish > bearish) finalResult.consensus = "买入";
+                else if (bearish > bullish * 1.5) finalResult.consensus = "卖出";
+                else if (bearish > bullish) finalResult.consensus = "减持";
+                else finalResult.consensus = "持有";
             } else {
                 // 根据目标价推测
-                if (result.upside !== "N/A") {
-                    const upsideNum = parseFloat(result.upside);
-                    if (upsideNum > 20) result.consensus = "买入";
-                    else if (upsideNum < -10) result.consensus = "卖出";
-                    else result.consensus = "持有";
+                if (finalResult.upside !== "N/A") {
+                    const upsideNum = parseFloat(finalResult.upside);
+                    if (upsideNum > 20) finalResult.consensus = "买入";
+                    else if (upsideNum < -10) finalResult.consensus = "卖出";
+                    else finalResult.consensus = "持有";
                 } else {
-                    result.consensus = "数据不足";
+                    finalResult.consensus = "数据不足";
                 }
             }
 
             if (!this.analystCache) this.analystCache = {};
-            this.analystCache[cacheKey] = { data: result, ts: Date.now() };
+            this.analystCache[cacheKey] = { data: finalResult, ts: Date.now() };
 
-            console.log("👔 Yahoo Finance分析师数据:", result);
-            return result;
+            console.log("👔 Yahoo Finance分析师数据:", finalResult);
+            return finalResult;
         } catch (e) {
             console.warn(`Failed to fetch analyst ratings for ${symbol}`, e);
             return this.getDefaultAnalystData();
-        }
-    }
-
-    // 解析Yahoo Finance的分析师推荐评级
-    parseAnalystRecommendations(html) {
-        try {
-            // Yahoo Finance在页面中以JSON格式嵌入数据
-            // 查找包含recommendationTrend的JSON数据
-            const match = html.match(/"recommendationTrend":\s*\{[^}]+\}/);
-            if (match) {
-                const jsonStr = '{' + match[0] + '}';
-                const data = JSON.parse(jsonStr);
-                const trend = data.recommendationTrend?.trend?.[0];
-                if (trend) {
-                    return {
-                        strongBuy: trend.strongBuy || 0,
-                        buy: trend.buy || 0,
-                        hold: trend.hold || 0,
-                        sell: trend.sell || 0,
-                        strongSell: trend.strongSell || 0
-                    };
-                }
-            }
-            
-            // 备选方案：搜索root.App.main JSON数据
-            const rootMatch = html.match(/root\.App\.main\s*=\s*({.+?});/s);
-            if (rootMatch) {
-                const data = JSON.parse(rootMatch[1]);
-                const trend = data?.context?.dispatcher?.stores?.QuoteSummaryStore?.recommendationTrend?.trend?.[0];
-                if (trend) {
-                    return {
-                        strongBuy: trend.strongBuy || 0,
-                        buy: trend.buy || 0,
-                        hold: trend.hold || 0,
-                        sell: trend.sell || 0,
-                        strongSell: trend.strongSell || 0
-                    };
-                }
-            }
-            
-            return null;
-        } catch (e) {
-            console.warn("解析推荐评级失败:", e);
-            return null;
-        }
-    }
-
-    // 解析Yahoo Finance的目标价
-    parsePriceTargets(html) {
-        try {
-            // 查找目标价数据
-            const targetMatch = html.match(/"targetMeanPrice":\s*\{[^}]+\}/);
-            if (targetMatch) {
-                const data = JSON.parse('{' + targetMatch[0] + '}');
-                return {
-                    targetMean: data.targetMeanPrice?.raw || 0,
-                    targetLow: 0,
-                    targetHigh: 0
-                };
-            }
-            
-            // 备选方案：从root.App.main获取
-            const rootMatch = html.match(/root\.App\.main\s*=\s*({.+?});/s);
-            if (rootMatch) {
-                const data = JSON.parse(rootMatch[1]);
-                const financial = data?.context?.dispatcher?.stores?.QuoteSummaryStore?.financialData;
-                if (financial) {
-                    return {
-                        targetLow: financial.targetLowPrice?.raw || 0,
-                        targetHigh: financial.targetHighPrice?.raw || 0,
-                        targetMean: financial.targetMeanPrice?.raw || 0
-                    };
-                }
-            }
-            
-            return { targetLow: 0, targetHigh: 0, targetMean: 0 };
-        } catch (e) {
-            console.warn("解析目标价失败:", e);
-            return { targetLow: 0, targetHigh: 0, targetMean: 0 };
-        }
-    }
-
-    // 3. 机构持股和内部交易（从Yahoo Finance网页爬取 - 完全免费）
-    async fetchInstitutionalData(symbol) {
-        const cacheKey = `institutional_${symbol}`;
-        const cached = this.institutionalCache?.[cacheKey];
-        if (cached && Date.now() - cached.ts < 86400000) { // 24小时缓存
-            return cached.data;
-        }
-
-        try {
-            console.log("🏦 从Yahoo Finance网页爬取机构持股:", symbol);
-            
-            // 从holders页面获取机构持股数据
-            const holdersUrl = `https://finance.yahoo.com/quote/${symbol}/holders`;
-            const html = await this.proxyFetch(holdersUrl);
-            const ownershipData = this.parseInstitutionalOwnership(html);
-            
-            if (!ownershipData) {
-                console.warn("🏦 Yahoo Finance无机构持股数据");
-                return this.getDefaultInstitutionalData();
-            }
-            
-            console.log("🏦 解析到机构持股数据:", ownershipData);
-
-            if (!this.institutionalCache) this.institutionalCache = {};
-            this.institutionalCache[cacheKey] = { data: ownershipData, ts: Date.now() };
-
-            return ownershipData;
-        } catch (e) {
-            console.warn(`Failed to fetch institutional data for ${symbol}`, e);
-            return this.getDefaultInstitutionalData();
-        }
-    }
-
-    // 解析Yahoo Finance的机构持股数据
-    parseInstitutionalOwnership(html) {
-        try {
-            // 查找majorHoldersBreakdown数据
-            const breakdownMatch = html.match(/"majorHoldersBreakdown":\s*\{[^}]+\}/);
-            let institutionPercent = "N/A";
-            let insiderPercent = "N/A";
-            
-            if (breakdownMatch) {
-                const data = JSON.parse('{' + breakdownMatch[0] + '}');
-                const breakdown = data.majorHoldersBreakdown;
-                institutionPercent = breakdown?.institutionsPercentHeld?.fmt || "N/A";
-                insiderPercent = breakdown?.insidersPercentHeld?.fmt || "N/A";
-            }
-            
-            // 查找前5大机构持有者
-            let topHolders = [];
-            const rootMatch = html.match(/root\.App\.main\s*=\s*({.+?});/s);
-            if (rootMatch) {
-                const data = JSON.parse(rootMatch[1]);
-                const institutions = data?.context?.dispatcher?.stores?.QuoteSummaryStore?.institutionOwnership?.ownershipList || [];
-                
-                topHolders = institutions.slice(0, 5).map(inst => ({
-                    name: inst.organization || "Unknown",
-                    shares: this.formatVolume(inst.position?.raw || 0),
-                    change: inst.pctChange?.raw || 0
-                }));
-            }
-            
-            // 计算平均变化
-            const avgChange = topHolders.length > 0
-                ? (topHolders.reduce((sum, h) => sum + (h.change || 0), 0) / topHolders.length).toFixed(2)
-                : 0;
-            
-            return {
-                // 机构持股比例
-                institutionOwnership: institutionPercent,
-                insiderOwnership: insiderPercent,
-                
-                // 机构动向
-                institutionalTrend: avgChange > 2 ? "增持📈" : avgChange < -2 ? "减持📉" : "稳定",
-                avgInstitutionalChange: avgChange + "%",
-                topHolders: topHolders,
-                
-                // 内部交易
-                recentInsiderTransactions: [],
-                insiderSentiment: topHolders.length > 0 ? "已获取机构数据" : "数据不可用"
-            };
-        } catch (e) {
-            console.warn("解析机构持股失败:", e);
-            return null;
         }
     }
 
