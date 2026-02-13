@@ -3145,25 +3145,43 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 console.warn("👔 未找到页面标题，可能是无效HTML");
             }
 
-            // 策略1: 宽松的JSON提取
-            // 查找 "recommendationTrend":{...} 结构
-            const trendMatch = html.match(/"recommendationTrend"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/);
+            // 策略1: 直接提取 recommendationTrend 数组
+            const trendMatch = html.match(/"recommendationTrend"\s*:\s*\{\s*"trend"\s*:\s*(\[[^\]]+\])/);
             if (trendMatch) {
                 try {
-                    const data = JSON.parse(trendMatch[1]);
-                    // 检查数据结构 (有时直接是 trend 对象，有时是包含 trend 数组的对象)
-                    const trend = data.trend?.[0] || data;
-                    if (trend && (trend.buy !== undefined || trend.strongBuy !== undefined)) {
-                         return {
-                            strongBuy: trend.strongBuy || 0,
-                            buy: trend.buy || 0,
-                            hold: trend.hold || 0,
-                            sell: trend.sell || 0,
-                            strongSell: trend.strongSell || 0
+                    const trendArr = JSON.parse(trendMatch[1]);
+                    const trend = Array.isArray(trendArr) ? trendArr[0] : null;
+                    if (trend) {
+                        return {
+                            strongBuy: Number(trend.strongBuy) || 0,
+                            buy: Number(trend.buy) || 0,
+                            hold: Number(trend.hold) || 0,
+                            sell: Number(trend.sell) || 0,
+                            strongSell: Number(trend.strongSell) || 0
                         };
                     }
                 } catch (e) {
                     console.warn("策略1 JSON解析失败:", e);
+                }
+            }
+
+            // 策略1.1: 从 QuoteSummaryStore JSON 片段提取
+            const qssMatch = html.match(/"QuoteSummaryStore"\s*:\s*(\{.+?\})\s*,\s*"StreamDataStore"/s);
+            if (qssMatch) {
+                try {
+                    const qssObj = JSON.parse(`{${qssMatch[1]}}`);
+                    const trend = qssObj?.recommendationTrend?.trend?.[0];
+                    if (trend) {
+                        return {
+                            strongBuy: Number(trend.strongBuy) || 0,
+                            buy: Number(trend.buy) || 0,
+                            hold: Number(trend.hold) || 0,
+                            sell: Number(trend.sell) || 0,
+                            strongSell: Number(trend.strongSell) || 0
+                        };
+                    }
+                } catch (e) {
+                    console.warn("策略1.1 QuoteSummaryStore解析失败:", e);
                 }
             }
             
@@ -3187,13 +3205,13 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                         const rowText = row.innerText;
                         const cells = row.querySelectorAll("td");
                         if (cells.length > 1) {
-                            const val = parseInt(cells[1].innerText) || 0;
+                            const val = parseInt(cells[1].innerText.replace(/[^0-9]/g, "")) || 0;
                             if (rowText.includes("Strong Buy")) result.strongBuy = val;
-                            else if (rowText.includes("Buy")) result.buy = val;
-                            else if (rowText.includes("Hold")) result.hold = val;
+                            else if (rowText.includes("Strong Sell")) result.strongSell = val;
                             else if (rowText.includes("Underperform")) result.sell = val; // Yahoo有时叫Underperform
                             else if (rowText.includes("Sell")) result.sell = val;
-                            else if (rowText.includes("Strong Sell")) result.strongSell = val;
+                            else if (rowText.includes("Hold")) result.hold = val;
+                            else if (rowText.includes("Buy")) result.buy = val;
                         }
                     });
                     
@@ -3214,13 +3232,31 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
     // 解析目标价（HTML爬虫 + DOM解析）
     parsePriceTargets(html) {
         try {
-            // 策略1: 宽松JSON
-            const targetMatch = html.match(/"targetMeanPrice"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/);
+            // 策略1: 直接提取 financialData 片段
+            const financialMatch = html.match(/"financialData"\s*:\s*(\{.+?\})\s*,\s*"quoteType"/s);
+            if (financialMatch) {
+                try {
+                    const financial = JSON.parse(`{${financialMatch[1]}}`);
+                    const targetMean = financial?.targetMeanPrice?.raw;
+                    const targetLow = financial?.targetLowPrice?.raw;
+                    const targetHigh = financial?.targetHighPrice?.raw;
+                    if (targetMean || targetLow || targetHigh) {
+                        return {
+                            targetLow: targetLow || 0,
+                            targetHigh: targetHigh || 0,
+                            targetMean: targetMean || 0
+                        };
+                    }
+                } catch (e) {}
+            }
+
+            // 策略1.1: 直接提取 targetMeanPrice 片段
+            const targetMatch = html.match(/"targetMeanPrice"\s*:\s*(\{[^}]+\})/);
             if (targetMatch) {
                 try {
-                    const data = JSON.parse(targetMatch[1]);
-                    if (data.raw) {
-                         return { targetLow: 0, targetHigh: 0, targetMean: data.raw };
+                    const obj = JSON.parse(targetMatch[1]);
+                    if (obj.raw) {
+                        return { targetLow: 0, targetHigh: 0, targetMean: obj.raw };
                     }
                 } catch (e) {}
             }
