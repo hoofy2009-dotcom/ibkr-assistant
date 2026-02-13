@@ -3037,7 +3037,7 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
     }
 
-    // 2. 分析师评级和目标价（从Yahoo Finance API - 完全免费）
+    // 2. 分析师评级和目标价（Yahoo Finance高级数据需要认证访问）
     async fetchAnalystRatings(symbol) {
         const cacheKey = `analyst_${symbol}`;
         const cached = this.analystCache?.[cacheKey];
@@ -3045,103 +3045,39 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             return cached.data;
         }
 
-        try {
-            console.log("👔 从Yahoo Finance API获取分析师评级:", symbol);
-            
-            // 🎯 使用Yahoo的JSON API（避免CORS问题）
-            const apiUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=recommendationTrend,financialData`;
-            const jsonText = await this.proxyFetch(apiUrl);
-            const jsonData = JSON.parse(jsonText);
-            
-            const result = jsonData?.quoteSummary?.result?.[0];
-            if (!result) {
-                console.warn("👔 API返回空数据");
-                return this.getDefaultAnalystData();
-            }
-            
-            // 解析推荐评级
-            const trend = result.recommendationTrend?.trend?.[0];
-            const recommendations = trend ? {
-                strongBuy: trend.strongBuy || 0,
-                buy: trend.buy || 0,
-                hold: trend.hold || 0,
-                sell: trend.sell || 0,
-                strongSell: trend.strongSell || 0
-            } : null;
-            
-            console.log("👔 解析到推荐评级:", recommendations);
-            
-            // 解析目标价
-            const financial = result.financialData;
-            const priceTargets = {
-                targetLow: financial?.targetLowPrice?.raw || 0,
-                targetHigh: financial?.targetHighPrice?.raw || 0,
-                targetMean: financial?.targetMeanPrice?.raw || 0
-            };
-            
-            console.log("👔 解析到目标价:", priceTargets);
-            
-            // 构造最终结果
-            const finalResult = {
-                // 评级分布
-                strongBuy: recommendations?.strongBuy || 0,
-                buy: recommendations?.buy || 0,
-                hold: recommendations?.hold || 0,
-                sell: recommendations?.sell || 0,
-                strongSell: recommendations?.strongSell || 0,
-                
-                // 综合评级
-                totalAnalysts: recommendations ? 
-                    (recommendations.strongBuy + recommendations.buy + recommendations.hold + recommendations.sell + recommendations.strongSell) : 0,
-                
-                // 目标价
-                targetLow: priceTargets.targetLow,
-                targetHigh: priceTargets.targetHigh,
-                targetMean: priceTargets.targetMean,
-                targetMedian: 0,
-                
-                // 当前价
-                currentPrice: this.state.price || 0,
-                
-                // 上行空间
-                upside: "N/A"
-            };
+        console.log("👔 分析师评级功能需要Yahoo Finance高级账户");
+        
+        // 返回带有链接的默认数据
+        const result = this.getDefaultAnalystData();
+        result.consensus = `<a href="https://finance.yahoo.com/quote/${symbol}/analysis" target="_blank" style="color:#4CAF50; text-decoration:underline;">查看Yahoo Finance</a>`;
+        result.note = "分析师评级需要高级账户或访问Yahoo Finance";
+        
+        if (!this.analystCache) this.analystCache = {};
+        this.analystCache[cacheKey] = { data: result, ts: Date.now() };
+        
+        return result;
+    }
 
-            // 计算上行空间
-            if (finalResult.targetMean && finalResult.currentPrice) {
-                finalResult.upside = (((finalResult.targetMean - finalResult.currentPrice) / finalResult.currentPrice) * 100).toFixed(1);
-            }
-
-            // 综合评级倾向
-            if (recommendations) {
-                const bullish = (finalResult.strongBuy * 2 + finalResult.buy);
-                const bearish = (finalResult.strongSell * 2 + finalResult.sell);
-                if (bullish > bearish * 1.5) finalResult.consensus = "强烈买入";
-                else if (bullish > bearish) finalResult.consensus = "买入";
-                else if (bearish > bullish * 1.5) finalResult.consensus = "卖出";
-                else if (bearish > bullish) finalResult.consensus = "减持";
-                else finalResult.consensus = "持有";
-            } else {
-                // 根据目标价推测
-                if (finalResult.upside !== "N/A") {
-                    const upsideNum = parseFloat(finalResult.upside);
-                    if (upsideNum > 20) finalResult.consensus = "买入";
-                    else if (upsideNum < -10) finalResult.consensus = "卖出";
-                    else finalResult.consensus = "持有";
-                } else {
-                    finalResult.consensus = "数据不足";
-                }
-            }
-
-            if (!this.analystCache) this.analystCache = {};
-            this.analystCache[cacheKey] = { data: finalResult, ts: Date.now() };
-
-            console.log("👔 Yahoo Finance分析师数据:", finalResult);
-            return finalResult;
-        } catch (e) {
-            console.warn(`Failed to fetch analyst ratings for ${symbol}`, e);
-            return this.getDefaultAnalystData();
+    // 3. 机构持股数据（Yahoo Finance高级数据需要认证访问）
+    async fetchInstitutionalData(symbol) {
+        const cacheKey = `institutional_${symbol}`;
+        const cached = this.institutionalCache?.[cacheKey];
+        if (cached && Date.now() - cached.ts < 86400000) { // 24小时缓存
+            return cached.data;
         }
+
+        console.log("🏦 机构持股功能需要Yahoo Finance高级账户");
+        
+        // 返回带有链接的默认数据
+        const result = this.getDefaultInstitutionalData();
+        result.institutionOwnership = `<a href="https://finance.yahoo.com/quote/${symbol}/holders" target="_blank" style="color:#4CAF50; text-decoration:underline;">查看Yahoo Finance</a>`;
+        result.institutionalTrend = "需要高级账户";
+        result.note = "机构持股数据需要高级账户或访问Yahoo Finance";
+        
+        if (!this.institutionalCache) this.institutionalCache = {};
+        this.institutionalCache[cacheKey] = { data: result, ts: Date.now() };
+        
+        return result;
     }
 
     // 辅助函数：返回默认分析师数据
