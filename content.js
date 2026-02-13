@@ -3131,17 +3131,27 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
     }
 
-    // 解析分析师推荐评级（从HTML中提取JSON）
+    // 解析分析师推荐评级（HTML爬虫 + DOM解析）
     parseAnalystRecommendations(html) {
         try {
-            // 策略1: 查找root.App.main嵌入的JSON
-            const rootMatch = html.match(/root\.App\.main\s*=\s*(\{.+?\}\})\s*;/s);
-            if (rootMatch) {
+            // 调试信息：检查HTML标题确认页面正确
+            const titleMatch = html.match(/<title>([^<]*)<\/title>/);
+            if (titleMatch) {
+                console.log("👔 页面标题:", titleMatch[1]);
+            } else {
+                console.warn("👔 未找到页面标题，可能是无效HTML");
+            }
+
+            // 策略1: 宽松的JSON提取
+            // 查找 "recommendationTrend":{...} 结构
+            const trendMatch = html.match(/"recommendationTrend"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/);
+            if (trendMatch) {
                 try {
-                    const jsonData = JSON.parse(rootMatch[1]);
-                    const trend = jsonData?.context?.dispatcher?.stores?.QuoteSummaryStore?.recommendationTrend?.trend?.[0];
-                    if (trend) {
-                        return {
+                    const data = JSON.parse(trendMatch[1]);
+                    // 检查数据结构 (有时直接是 trend 对象，有时是包含 trend 数组的对象)
+                    const trend = data.trend?.[0] || data;
+                    if (trend && (trend.buy !== undefined || trend.strongBuy !== undefined)) {
+                         return {
                             strongBuy: trend.strongBuy || 0,
                             buy: trend.buy || 0,
                             hold: trend.hold || 0,
@@ -3150,27 +3160,47 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                         };
                     }
                 } catch (e) {
-                    console.warn("解析root.App.main失败:", e.message);
+                    console.warn("策略1 JSON解析失败:", e);
                 }
             }
             
-            // 策略2: 直接查找recommendationTrend片段
-            const trendMatch = html.match(/"recommendationTrend":\s*\{"trend":\s*\[(\{[^\]]+\})\]/);
-            if (trendMatch) {
-                try {
-                    const trendObj = JSON.parse(trendMatch[1]);
-                    return {
-                        strongBuy: trendObj.strongBuy || 0,
-                        buy: trendObj.buy || 0,
-                        hold: trendObj.hold || 0,
-                        sell: trendObj.sell || 0,
-                        strongSell: trendObj.strongSell || 0
-                    };
-                } catch (e) {
-                    console.warn("解析recommendationTrend片段失败:", e.message);
+            // 策略2: DOM解析 (更稳健)
+            // Yahoo Analysis页面通常由表格组成
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
+            
+            // 查找评级表格
+            const tables = doc.querySelectorAll("table");
+            for (const table of tables) {
+                const text = table.innerText || "";
+                if (text.includes("Strong Buy") && text.includes("Strong Sell")) {
+                    // 假设这是一个评级表格，尝试提取数字
+                    // 现在的Yahoo页面结构经常变化，这里尝试简单的文本提取
+                    // 行通常是: Rating | Current | 1 Month Ago ...
+                    const rows = table.querySelectorAll("tr");
+                    let result = { strongBuy: 0, buy: 0, hold: 0, sell: 0, strongSell: 0 };
+                    
+                    rows.forEach(row => {
+                        const rowText = row.innerText;
+                        const cells = row.querySelectorAll("td");
+                        if (cells.length > 1) {
+                            const val = parseInt(cells[1].innerText) || 0;
+                            if (rowText.includes("Strong Buy")) result.strongBuy = val;
+                            else if (rowText.includes("Buy")) result.buy = val;
+                            else if (rowText.includes("Hold")) result.hold = val;
+                            else if (rowText.includes("Underperform")) result.sell = val; // Yahoo有时叫Underperform
+                            else if (rowText.includes("Sell")) result.sell = val;
+                            else if (rowText.includes("Strong Sell")) result.strongSell = val;
+                        }
+                    });
+                    
+                    // 验证是否获取到了数据
+                    const total = result.strongBuy + result.buy + result.hold + result.sell + result.strongSell;
+                    if (total > 0) return result;
                 }
             }
-            
+
+            console.warn("👔 未能解析出分析师评级数据");
             return null;
         } catch (e) {
             console.warn("解析推荐评级异常:", e);
@@ -3178,27 +3208,42 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
     }
 
-    // 解析目标价（从HTML中提取JSON）
+    // 解析目标价（HTML爬虫 + DOM解析）
     parsePriceTargets(html) {
         try {
-            // 从root.App.main提取financialData
-            const rootMatch = html.match(/root\.App\.main\s*=\s*(\{.+?\}\})\s*;/s);
-            if (rootMatch) {
+            // 策略1: 宽松JSON
+            const targetMatch = html.match(/"targetMeanPrice"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/);
+            if (targetMatch) {
                 try {
-                    const jsonData = JSON.parse(rootMatch[1]);
-                    const financial = jsonData?.context?.dispatcher?.stores?.QuoteSummaryStore?.financialData;
-                    if (financial) {
-                        return {
-                            targetLow: financial.targetLowPrice?.raw || 0,
-                            targetHigh: financial.targetHighPrice?.raw || 0,
-                            targetMean: financial.targetMeanPrice?.raw || 0
-                        };
+                    const data = JSON.parse(targetMatch[1]);
+                    if (data.raw) {
+                         return { targetLow: 0, targetHigh: 0, targetMean: data.raw };
                     }
-                } catch (e) {
-                    console.warn("解析financialData失败:", e.message);
+                } catch (e) {}
+            }
+
+            // 策略2: DOM解析
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
+            
+            // 查找包含 "Average Target Price" 或类似文本的元素
+            // Yahoo页面有时显示为 "Average" 和价格
+            const spans = doc.querySelectorAll("span, div");
+            for (const span of spans) {
+                if (span.textContent.includes("Average Target Price")) {
+                    // 寻找附近的数字
+                    // 通常结构是 <span>Label</span> <span>Value</span>
+                    // 或者是 父级div包含两者
+                    const parent = span.parentElement;
+                    if (parent) {
+                        const prices = parent.innerText.match(/\d+\.\d{2}/g);
+                        if (prices && prices.length > 0) {
+                            return { targetMean: parseFloat(prices[0]), targetLow: 0, targetHigh: 0 };
+                        }
+                    }
                 }
             }
-            
+
             return { targetLow: 0, targetHigh: 0, targetMean: 0 };
         } catch (e) {
             console.warn("解析目标价异常:", e);
@@ -3242,37 +3287,107 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
     }
 
-    // 解析机构持股数据（从HTML中提取JSON）
+    // 解析机构持股数据（HTML爬虫 + DOM解析）
     parseInstitutionalOwnership(html) {
         try {
-            // 从root.App.main提取机构持股数据
-            const rootMatch = html.match(/root\.App\.main\s*=\s*(\{.+?\}\})\s*;/s);
-            if (!rootMatch) {
-                console.warn("未找到root.App.main数据");
-                return null;
+            // 调试信息
+            const titleMatch = html.match(/<title>([^<]*)<\/title>/);
+            if (titleMatch) console.log("🏦 页面标题:", titleMatch[1]);
+            
+            // 策略1: 宽松JSON提取 (majorHoldersBreakdown)
+            const breakdownMatch = html.match(/"majorHoldersBreakdown"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/);
+            let institutionPercent = "N/A";
+            let insiderPercent = "N/A";
+            
+            if (breakdownMatch) {
+                try {
+                    const data = JSON.parse(breakdownMatch[1]);
+                    institutionPercent = data.institutionsPercentHeld?.fmt || "N/A";
+                    insiderPercent = data.insidersPercentHeld?.fmt || "N/A";
+                } catch(e) {}
             }
             
-            const jsonData = JSON.parse(rootMatch[1]);
-            const store = jsonData?.context?.dispatcher?.stores?.QuoteSummaryStore;
-            
-            if (!store) {
-                console.warn("未找到QuoteSummaryStore");
-                return null;
+            // 策略2: JSON提取 (topHolders)
+            let topHolders = [];
+            // 尝试查找 institutionOwnership (可能不在同一个JSON块中)
+            const ownershipMatch = html.match(/"institutionOwnership"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/);
+            if (ownershipMatch) {
+               try {
+                   const data = JSON.parse(ownershipMatch[1]);
+                   const list = data.ownershipList || [];
+                   topHolders = list.slice(0, 5).map(inst => ({
+                        name: inst.organization || "Unknown",
+                        shares: this.formatVolume(inst.position?.raw || 0),
+                        change: inst.pctChange?.raw || 0
+                    }));
+               } catch(e) {}
             }
             
-            // 提取持股比例
-            const breakdown = store.majorHoldersBreakdown;
-            const institutionPercent = breakdown?.institutionsPercentHeld?.fmt || "N/A";
-            const insiderPercent = breakdown?.insidersPercentHeld?.fmt || "N/A";
-            
-            // 提取前5大机构
-            const institutions = store.institutionOwnership?.ownershipList || [];
-            const topHolders = institutions.slice(0, 5).map(inst => ({
-                name: inst.organization || "Unknown",
-                shares: this.formatVolume(inst.position?.raw || 0),
-                change: inst.pctChange?.raw || 0
-            }));
-            
+            // 策略3: DOM解析 (Backup)
+            if (institutionPercent === "N/A") {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, "text/html");
+                
+                // 查找包含 "% Held by Institutions" 的文本
+                // 结构通常是: <span>X.XX%</span> <span>% Held by Institutions</span>
+                const allDivs = doc.querySelectorAll("div, span, td");
+                for (const el of allDivs) {
+                    if (el.innerText && el.innerText.includes("% Held by Institutions")) {
+                        // 尝试找前一个兄弟节点或父节点的第一个子节点
+                        // 这是一个启发式搜索
+                        const parent = el.parentElement;
+                        if (parent) {
+                            const match = parent.innerText.match(/(\d+\.\d+)%/);
+                            if (match) {
+                                institutionPercent = match[1] + "%";
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // 查找Insiders
+                if (insiderPercent === "N/A") {
+                    for (const el of allDivs) {
+                        if (el.innerText && el.innerText.includes("% Held by Insiders")) {
+                            const parent = el.parentElement;
+                            if (parent) {
+                                const match = parent.innerText.match(/(\d+\.\d+)%/);
+                                if (match) {
+                                    insiderPercent = match[1] + "%";
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // DOM解析 Top Holders 表格
+                if (topHolders.length === 0) {
+                     const tables = doc.querySelectorAll("table");
+                     for (const table of tables) {
+                         const headerText = table.querySelector("thead")?.innerText || table.innerText;
+                         if (headerText.includes("Top Institutional Holders")) {
+                             const rows = table.querySelectorAll("tbody tr");
+                             let count = 0;
+                             rows.forEach(row => {
+                                 if (count >= 5) return;
+                                 const cells = row.querySelectorAll("td");
+                                 if (cells.length >= 4) {
+                                     // Name | Shares | Date | % Out | Value
+                                     // 格式可能会变，取第一列和最后一列或中间列
+                                     const name = cells[0].innerText;
+                                     const shares = cells[1].innerText; 
+                                     // 变化率通常不显示在Top Holders表中，设为0
+                                     topHolders.push({ name, shares, change: 0 });
+                                     count++;
+                                 }
+                             });
+                         }
+                     }
+                }
+            }
+
             // 计算平均变化
             const avgChange = topHolders.length > 0
                 ? (topHolders.reduce((sum, h) => sum + (h.change || 0), 0) / topHolders.length).toFixed(2)
