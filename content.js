@@ -26,6 +26,9 @@ class TradingAssistant {
         this.watchlistHistory = new Map(); // symbol -> {history: [], lastUpdate: timestamp}
         this.watchlistUpdateTimer = null;
 
+        // Cache latest AI verdict per symbol (used by watchlist to stay consistent)
+        this.aiDecisionCache = new Map();
+
         // 技术指标趋势追踪
         this.indicatorHistory = {
             rsi: [],
@@ -2469,6 +2472,19 @@ class TradingAssistant {
             document.getElementById("lvl-res").innerText = avgRes;
 
             const actionColor = winner==='BUY'?'#4caf50':(winner==='SELL'?'#f44336':'#aaa');
+
+            // Persist AI verdict for watchlist alignment (15m freshness window)
+            this.aiDecisionCache.set(ctx.symbol, {
+                action: winner,
+                sentiment: parseFloat(avgSent),
+                support: avgSup,
+                resistance: avgRes,
+                summary: `AI ${winner} | 情绪 ${avgSent}/10 | 支撑 ${avgSup} | 阻力 ${avgRes}`,
+                ts: Date.now()
+            });
+            // Refresh watchlist immediately so displayed suggestion matches AI output
+            this.updateWatchlistData();
+
             analysisEl.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <strong>综合评级 ${avgSent}/10</strong>
@@ -4132,27 +4148,21 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 const colorClass = changeP >= 0 ? "value-up" : "value-down";
                 const changeStr = sign + changeP.toFixed(2) + "%";
                 
-                // --- 做T策略信号逻辑（Watchlist）---
-                // 基于日内涨跌 + ATR波动率判断低吸高抛机会
+                // --- Watchlist signals ---
+                // Prefer the latest AI verdict for this symbol, fall back to做T规则
                 let action = "观望";
                 let actionColor = "#555";
                 let actionReason = "涨跌幅在正常波动范围内";
                 let volatilityAlert = ""; // 波动率横幅警告
-                
-                // 计算ATR波动率 - 优先使用Watchlist历史数据
-                let atr = 0;
                 let volatilityLevel = "正常"; // 正常/剧烈/极端
-                
-                // 尝试从Watchlist历史数据获取ATR
+                let decisionSource = "本地"; // AI 或 本地做T
+
+                // 计算ATR波动率 - 优先使用Watchlist历史数据
+                let atrPercent = 0;
                 const watchlistData = this.watchlistHistory.get(sym);
-                let hasATR = false;
-                
                 if (watchlistData && watchlistData.history && watchlistData.history.length >= 14) {
-                    // 使用Watchlist专属历史数据
-                    atr = this.calculateATR(watchlistData.history, 14);
-                    const atrPercent = (atr / price) * 100;
-                    hasATR = true;
-                    
+                    const atr = this.calculateATR(watchlistData.history, 14);
+                    atrPercent = (atr / price) * 100;
                     if (atrPercent > 3.0) {
                         volatilityLevel = "极端";
                         volatilityAlert = `\u26A0\uFE0F 波动极端(ATR ${atrPercent.toFixed(1)}%)`;
@@ -4161,11 +4171,8 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                         volatilityAlert = `\u{1F4CA} 波动剧烈(ATR ${atrPercent.toFixed(1)}%)`;
                     }
                 } else if (sym === this.state.symbol && this.state.history && this.state.history.length >= 14) {
-                    // Fallback: 如果是当前监控symbol，使用主历史数据
-                    atr = this.calculateATR(this.state.history, 14);
-                    const atrPercent = (atr / price) * 100;
-                    hasATR = true;
-                    
+                    const atr = this.calculateATR(this.state.history, 14);
+                    atrPercent = (atr / price) * 100;
                     if (atrPercent > 3.0) {
                         volatilityLevel = "极端";
                         volatilityAlert = `\u26A0\uFE0F 波动极端(ATR ${atrPercent.toFixed(1)}%)`;
@@ -4174,42 +4181,65 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                         volatilityAlert = `\u{1F4CA} 波动剧烈(ATR ${atrPercent.toFixed(1)}%)`;
                     }
                 }
-                
-                // 结合涨跌幅和波动率给出做T信号
-                if (changeP >= 2.5) { 
-                    action = "\u{1F4C9}卖出"; // 📉
-                    actionColor = "#f44336"; // Red
-                    actionReason = `日内涨幅${changeP.toFixed(2)}%，高位卖出做T，等待回调再接`;
-                    if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
-                        actionReason += `\n${volatilityAlert} - 向上波动加速，卖出获利窗口`;
+
+                // 如果有新鲜的AI决策，则直接复用，确保Watchlist与AI一致
+                const aiDecision = this.aiDecisionCache.get(sym);
+                const aiFresh = aiDecision && (Date.now() - aiDecision.ts < 15 * 60 * 1000);
+                if (aiFresh) {
+                    const aiAct = (aiDecision.action || "HOLD").toUpperCase();
+                    decisionSource = "AI";
+                    if (aiAct === "BUY") {
+                        action = "\u{1F9E0}买入"; // 🧠
+                        actionColor = "#4caf50";
+                    } else if (aiAct === "SELL") {
+                        action = "\u{1F9E0}卖出";
+                        actionColor = "#f44336";
+                    } else {
+                        action = "\u{1F9E0}观望";
+                        actionColor = "#9e9e9e";
                     }
-                } else if (changeP >= 1.0) {
-                    action = "\u{1F4E4}减仓"; // 📤
-                    actionColor = "#ff9800"; // Orange
-                    actionReason = `日内涨幅${changeP.toFixed(2)}%，部分获利了结，保留底仓`;
-                    if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
-                        actionReason += `\n${volatilityAlert} - 波动放大，建议部分锁利`;
-                    }
-                } else if (changeP <= -3.0) {
-                    action = "\u{1F4E5}收筹"; // 📥
-                    actionColor = "#4caf50"; // Green
-                    actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，低位收筹码，分批建仓`;
-                    if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
-                        actionReason += `\n${volatilityAlert} - 向下波动加剧，分批抄底良机`;
-                    }
-                } else if (changeP <= -1.5) {
-                    action = "\u2705买入"; // ✅
-                    actionColor = "#66bb6a"; // Light Green
-                    actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，回调到位，适合低吸做T`;
-                    if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
-                        actionReason += `\n${volatilityAlert} - 下跌波动放大，低吸做T窗口`;
-                    }
-                } else if (changeP > -0.5 && changeP < 0.5) {
-                    action = "\u{1F504}观察"; // 🔄
-                    actionColor = "#9e9e9e"; // Gray
-                    actionReason = "价格窄幅震荡，等待明确方向";
-                    if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
-                        actionReason += `\n${volatilityAlert} - 警惕即将突破`;
+
+                    const sent = aiDecision.sentiment ? `情绪 ${aiDecision.sentiment}/10` : "AI verdict";
+                    actionReason = aiDecision.summary || sent;
+                    if (volatilityAlert) actionReason += `\n${volatilityAlert}`;
+                } else {
+                    // 结合涨跌幅和波动率给出做T信号
+                    if (changeP >= 2.5) { 
+                        action = "\u{1F4C9}卖出"; // 📉
+                        actionColor = "#f44336"; // Red
+                        actionReason = `日内涨幅${changeP.toFixed(2)}%，高位卖出做T，等待回调再接`;
+                        if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
+                            actionReason += `\n${volatilityAlert} - 向上波动加速，卖出获利窗口`;
+                        }
+                    } else if (changeP >= 1.0) {
+                        action = "\u{1F4E4}减仓"; // 📤
+                        actionColor = "#ff9800"; // Orange
+                        actionReason = `日内涨幅${changeP.toFixed(2)}%，部分获利了结，保留底仓`;
+                        if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
+                            actionReason += `\n${volatilityAlert} - 波动放大，建议部分锁利`;
+                        }
+                    } else if (changeP <= -3.0) {
+                        action = "\u{1F4E5}收筹"; // 📥
+                        actionColor = "#4caf50"; // Green
+                        actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，低位收筹码，分批建仓`;
+                        if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
+                            actionReason += `\n${volatilityAlert} - 向下波动加剧，分批抄底良机`;
+                        }
+                    } else if (changeP <= -1.5) {
+                        action = "\u2705买入"; // ✅
+                        actionColor = "#66bb6a"; // Light Green
+                        actionReason = `日内跌幅${Math.abs(changeP).toFixed(2)}%，回调到位，适合低吸做T`;
+                        if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
+                            actionReason += `\n${volatilityAlert} - 下跌波动放大，低吸做T窗口`;
+                        }
+                    } else if (changeP > -0.5 && changeP < 0.5) {
+                        action = "\u{1F504}观察"; // 🔄
+                        actionColor = "#9e9e9e"; // Gray
+                        actionReason = "价格窄幅震荡，等待明确方向";
+                        if (volatilityLevel === "剧烈" || volatilityLevel === "极端") {
+                            actionReason += `\n${volatilityAlert} - 警惕即将突破`;
+                        }
+                        decisionSource = "本地";
                     }
                 }
 
@@ -4229,8 +4259,11 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                         <span class="mini-wl-symbol" title="${sym}">${sym}</span>
                         <span class="mini-wl-price">${price.toFixed(2)}</span>
                         <span class="mini-wl-action" 
-                              style="color:${actionColor}; border:1px solid ${actionColor}; border-radius:3px; cursor:help;" 
-                              title="${actionReason}">${action}</span>
+                            style="color:${actionColor}; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); box-shadow:0 0 6px ${actionColor}33; border-radius:5px; padding:0 6px; cursor:help; display:inline-flex; align-items:center; gap:6px;" 
+                            title="${actionReason}">
+                            <span style="font-weight:600;">${action}</span>
+                            <span style="font-size:9px; color:#cfd8dc; background:#1c1c1c; border:1px solid #3a3a3a; padding:0 4px; border-radius:3px; letter-spacing:0.5px;">${decisionSource}</span>
+                        </span>
                         <span class="mini-wl-change ${colorClass}">${changeStr}</span>
                     </div>
                 `;
