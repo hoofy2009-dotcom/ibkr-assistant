@@ -3057,6 +3057,9 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 console.log("👔 请求页面:", analysisUrl);
                 const html = await this.proxyFetch(analysisUrl);
                 
+                // 打印前500个字符用于调试（确认是否被Yahoo拦截）
+                console.log("👔 HTML预览:", html.substring(0, 500));
+                
                 // 从HTML中提取嵌入的JSON数据
                 recommendations = this.parseAnalystRecommendations(html);
                 priceTargets = this.parsePriceTargets(html);
