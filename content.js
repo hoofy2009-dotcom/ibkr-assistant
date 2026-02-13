@@ -1390,8 +1390,11 @@ class TradingAssistant {
             const rsi = this.calculateRSI(this.state.history, 14);
             const rsiEl = document.getElementById("assist-rsi");
             
-            // 计算趋势箭头
-            const rsiTrend = this.calculateIndicatorTrend('rsi', rsi);
+            // 计算趋势箭头 (with defensive check)
+            let rsiTrend = "";
+            if (typeof this.calculateIndicatorTrend === 'function') {
+                rsiTrend = this.calculateIndicatorTrend('rsi', rsi);
+            }
             if (rsiEl) rsiEl.innerText = `${rsi.toFixed(2)} ${rsiTrend}`;
             
             const rsiSignal = document.getElementById("assist-rsi-signal");
@@ -1420,8 +1423,11 @@ class TradingAssistant {
             const macd = this.calculateMACD(this.state.history);
             const macdEl = document.getElementById("assist-macd");
             
-            // 计算趋势箭头
-            const macdTrend = this.calculateIndicatorTrend('macd', macd.histogram);
+            // 计算趋势箭头 (with defensive check)
+            let macdTrend = "";
+            if (typeof this.calculateIndicatorTrend === 'function') {
+                macdTrend = this.calculateIndicatorTrend('macd', macd.histogram);
+            }
             if (macdEl) macdEl.innerText = `${macd.histogram.toFixed(3)} ${macdTrend}`;
             
             const macdSignal = document.getElementById("assist-macd-signal");
@@ -2777,26 +2783,41 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
 
     // Proxy Fetch Helper to bypass CORS using Background Script
     async proxyFetch(url) {
+        console.log("🌐 代理请求:", url);
         return new Promise((resolve, reject) => {
             try {
                 if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+                    console.error("❌ Extension Context Invalid");
                     return reject(new Error("Extension Context Invalid"));
                 }
 
+                const timeout = setTimeout(() => {
+                    console.error("❌ 请求超时:", url);
+                    reject(new Error("Request timeout after 30s"));
+                }, 30000);
+
                 chrome.runtime.sendMessage({ action: "FETCH_DATA", url: url }, (response) => {
+                    clearTimeout(timeout);
+                    
                     // Check for runtime errors (e.g. background script not found)
                     if (chrome.runtime.lastError) {
+                        console.error("❌ Chrome Runtime错误:", chrome.runtime.lastError.message);
                         return reject(new Error(chrome.runtime.lastError.message));
                     }
                     
                     if (response && response.success) {
+                        console.log("✅ 请求成功:", url.substring(0, 50) + "...");
                         resolve(response.data);
                     } else {
                         const msg = response ? response.error : "Unknown Background Error";
+                        console.error("❌ 请求失败:", url, "错误:", msg);
                         reject(new Error(msg));
                     }
                 });
-            } catch(e) { reject(e instanceof Error ? e : new Error(String(e))); }
+            } catch(e) {
+                console.error("❌ ProxyFetch异常:", e);
+                reject(e instanceof Error ? e : new Error(String(e)));
+            }
         });
     }
 
@@ -2839,14 +2860,30 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         const cacheKey = `detailed_${symbol}`;
         const cached = this.detailedQuoteCache?.[cacheKey];
         if (cached && Date.now() - cached.ts < 300000) { // 5分钟缓存
+            console.log("📦 使用缓存的详细报价:", symbol);
             return cached.data;
         }
 
         try {
+            console.log("📊 开始获取详细报价:", symbol);
             const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`);
+            console.log("📊 原始响应长度:", rawText?.length || 0);
+            
             const data = JSON.parse(rawText);
+            console.log("📊 解析后的数据:", data);
+            
             const quote = data.quoteResponse?.result?.[0];
-            if (!quote) return null;
+            if (!quote) {
+                console.warn("📊 未找到quote数据，result:", data.quoteResponse?.result);
+                return null;
+            }
+            
+            console.log("📊 Quote对象:", {
+                volume: quote.regularMarketVolume,
+                avgVolume: quote.averageVolume,
+                fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh,
+                fiftyTwoWeekLow: quote.fiftyTwoWeekLow
+            });
 
             const result = {
                 // 成交量数据
