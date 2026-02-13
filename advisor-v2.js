@@ -1519,15 +1519,21 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
     }
 
     updateJournalStats() {
+        if (!this.state.trades) return;
+
         const total = this.state.trades.length;
         const closed = this.state.trades.filter(t => t.status === "CLOSED");
         const wins = closed.filter(t => t.pnl && t.pnl > 0).length;
         const winRate = closed.length > 0 ? (wins / closed.length * 100) : 0;
         const totalPnl = closed.reduce((sum, t) => sum + (t.pnl || 0), 0);
 
-        document.getElementById("v2-total-trades").innerText = total;
-        document.getElementById("v2-win-rate").innerText = winRate.toFixed(1) + "%";
-        document.getElementById("v2-total-pnl").innerText = "$" + totalPnl.toFixed(2);
+        const elTotal = document.getElementById("v2-total-trades");
+        const elWinRate = document.getElementById("v2-win-rate");
+        const elPnl = document.getElementById("v2-total-pnl");
+
+        if (elTotal) elTotal.innerText = total;
+        if (elWinRate) elWinRate.innerText = winRate.toFixed(1) + "%";
+        if (elPnl) elPnl.innerText = "$" + totalPnl.toFixed(2);
     }
 
     showJournalModal() {
