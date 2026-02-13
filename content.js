@@ -333,6 +333,12 @@ class TradingAssistant {
                         </div>
                     </div>
                     <div id="advanced-data-content" style="display:none; margin-top:5px;">
+                        <!-- Loading indicator -->
+                        <div id="advanced-loading" style="text-align:center; color:#888; padding:10px; font-size:10px;">
+                            ⏳ 正在加载数据...<br/>
+                            <span style="font-size:9px;">(首次加载需要3-5秒)</span>
+                        </div>
+                        
                         <!-- Volume Analysis -->
                         <div class="data-row" style="font-size:10px;">
                             <span class="label">📈 成交量</span>
@@ -782,6 +788,10 @@ class TradingAssistant {
             institutionalData: !!institutionalData,
             sentiment: !!sentiment
         });
+        
+        // 隐藏加载提示
+        const loadingEl = document.getElementById("advanced-loading");
+        if (loadingEl) loadingEl.style.display = "none";
         
         // Volume Analysis
         if (detailedQuote) {
