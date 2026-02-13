@@ -3037,7 +3037,7 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
     }
 
-    // 2. 分析师评级和目标价（使用Finnhub API）
+    // 2. 分析师评级和目标价（使用Finnhub API - 免费版）
     async fetchAnalystRatings(symbol) {
         const cacheKey = `analyst_${symbol}`;
         const cached = this.analystCache?.[cacheKey];
@@ -3054,15 +3054,10 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             
             console.log("👔 使用Finnhub API获取分析师评级:", symbol);
             
-            // Finnhub分析师推荐API
+            // Finnhub分析师推荐API（免费版可用）
             const recommendUrl = `https://finnhub.io/api/v1/stock/recommendation?symbol=${symbol}&token=${this.apiKeys.finnhubKey}`;
             const recommendText = await this.proxyFetch(recommendUrl);
             const recommendations = JSON.parse(recommendText);
-            
-            // Finnhub价格目标API
-            const targetUrl = `https://finnhub.io/api/v1/stock/price-target?symbol=${symbol}&token=${this.apiKeys.finnhubKey}`;
-            const targetText = await this.proxyFetch(targetUrl);
-            const priceTarget = JSON.parse(targetText);
             
             // 解析最新推荐（第一条是最新的）
             const latest = recommendations?.[0];
@@ -3082,22 +3077,18 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 // 综合评级
                 totalAnalysts: (latest.strongBuy || 0) + (latest.buy || 0) + (latest.hold || 0) + (latest.sell || 0) + (latest.strongSell || 0),
                 
-                // 目标价
-                targetLow: priceTarget?.targetLow || 0,
-                targetHigh: priceTarget?.targetHigh || 0,
-                targetMean: priceTarget?.targetMean || 0,
-                targetMedian: priceTarget?.targetMedian || 0,
+                // 目标价（免费版不提供，设为0）
+                targetLow: 0,
+                targetHigh: 0,
+                targetMean: 0,
+                targetMedian: 0,
                 
                 // 当前价
-                currentPrice: this.state.price || 0
+                currentPrice: this.state.price || 0,
+                
+                // 上行空间（无目标价数据）
+                upside: "N/A"
             };
-
-            // 计算上行/下行空间
-            if (result.targetMean && result.currentPrice) {
-                result.upside = (((result.targetMean - result.currentPrice) / result.currentPrice) * 100).toFixed(1);
-            } else {
-                result.upside = "N/A";
-            }
 
             // 综合评级倾向
             const bullish = (result.strongBuy * 2 + result.buy);
@@ -3115,7 +3106,7 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             return result;
         } catch (e) {
             console.warn(`Failed to fetch analyst ratings for ${symbol}`, e);
-            return null;
+            return this.getDefaultAnalystData();
         }
     }
 
