@@ -794,26 +794,24 @@ class TradingAssistant {
         if (loadingEl) loadingEl.style.display = "none";
         
         // Volume Analysis
-        if (detailedQuote) {
-            const volEl = document.getElementById("adv-volume");
-            const volRatioEl = document.getElementById("adv-volume-ratio");
-            const volSignal = document.getElementById("adv-volume-signal");
+        const volEl = document.getElementById("adv-volume");
+        const volRatioEl = document.getElementById("adv-volume-ratio");
+        const volSignal = document.getElementById("adv-volume-signal");
+        
+        if (detailedQuote && volEl && volRatioEl && volSignal) {
+            volEl.innerText = this.formatVolume(detailedQuote.volume);
+            volRatioEl.innerText = detailedQuote.volumeRatio + "x";
             
-            if (volEl) volEl.innerText = this.formatVolume(detailedQuote.volume);
-            if (volRatioEl) volRatioEl.innerText = detailedQuote.volumeRatio + "x";
-            
-            if (volSignal) {
-                const volRatio = parseFloat(detailedQuote.volumeRatio);
-                if (volRatio > 1.5) {
-                    volSignal.innerText = "放量📈";
-                    volSignal.style.color = "#4caf50";
-                } else if (volRatio < 0.7) {
-                    volSignal.innerText = "缩量📉";
-                    volSignal.style.color = "#f44336";
-                } else {
-                    volSignal.innerText = "正常";
-                    volSignal.style.color = "#aaa";
-                }
+            const volRatio = parseFloat(detailedQuote.volumeRatio);
+            if (volRatio > 1.5) {
+                volSignal.innerText = "放量📈";
+                volSignal.style.color = "#4caf50";
+            } else if (volRatio < 0.7) {
+                volSignal.innerText = "缩量📉";
+                volSignal.style.color = "#f44336";
+            } else {
+                volSignal.innerText = "正常";
+                volSignal.style.color = "#aaa";
             }
             
             // 52 Week Position
@@ -824,7 +822,7 @@ class TradingAssistant {
             if (pos52wEl) pos52wEl.innerText = detailedQuote.fiftyTwoWeekPosition + "%";
             if (range52wEl) range52wEl.innerText = detailedQuote.fiftyTwoWeekRange;
             
-            if (signal52w) {
+            if (signal52w && detailedQuote.fiftyTwoWeekPosition !== "N/A") {
                 const pos52w = parseFloat(detailedQuote.fiftyTwoWeekPosition);
                 if (pos52w > 80) {
                     signal52w.innerText = "高位⚠️";
@@ -837,25 +835,37 @@ class TradingAssistant {
                     signal52w.style.color = "#aaa";
                 }
             }
-        } else {
-            console.warn("⚠️ detailedQuote为空，跳过成交量和52周数据更新");
+        } else if (!detailedQuote) {
+            // 数据获取失败，显示错误信息
+            if (volEl) volEl.innerText = "获取失败";
+            if (volRatioEl) volRatioEl.innerText = "N/A";
+            if (volSignal) volSignal.innerText = "";
+            
+            const pos52wEl = document.getElementById("adv-52w-position");
+            const range52wEl = document.getElementById("adv-52w-range");
+            const signal52w = document.getElementById("adv-52w-signal");
+            if (pos52wEl) pos52wEl.innerText = "N/A";
+            if (range52wEl) range52wEl.innerText = "获取失败";
+            if (signal52w) signal52w.innerText = "";
+            
+            console.warn("⚠️ detailedQuote为空，已显示错误信息");
         }
         
         // Options Data
-        if (optionsData) {
-            const pcRatioEl = document.getElementById("adv-pc-ratio");
-            const pcSignal = document.getElementById("adv-pc-signal");
-            const ivEl = document.getElementById("adv-iv");
-            const ivSignal = document.getElementById("adv-iv-signal");
-            
-            if (pcRatioEl) pcRatioEl.innerText = optionsData.pcRatio;
+        const pcRatioEl = document.getElementById("adv-pc-ratio");
+        const pcSignal = document.getElementById("adv-pc-signal");
+        const ivEl = document.getElementById("adv-iv");
+        const ivSignal = document.getElementById("adv-iv-signal");
+        
+        if (optionsData && pcRatioEl && ivEl) {
+            pcRatioEl.innerText = optionsData.pcRatio;
             if (pcSignal) {
                 pcSignal.innerText = `(${optionsData.pcRatioSentiment})`;
                 pcSignal.style.color = optionsData.pcRatioSentiment === "看涨" ? "#4caf50" : 
                                        optionsData.pcRatioSentiment === "看空" ? "#f44336" : "#aaa";
             }
             
-            if (ivEl) ivEl.innerText = optionsData.impliedVolatility + "%";
+            ivEl.innerText = optionsData.impliedVolatility + "%";
             if (ivSignal) {
                 ivSignal.innerText = `(${optionsData.ivLevel})`;
                 ivSignal.style.color = parseFloat(optionsData.impliedVolatility) > 40 ? "#ff9800" : "#aaa";
@@ -868,50 +878,60 @@ class TradingAssistant {
                              optionsData.pcRatioSentiment === "看空" ? '#f44336' : '#aaa';
                 optionsEl.innerHTML = `<span style="color:${color}">🎲 P/C ${optionsData.pcRatio}</span>`;
             }
-        } else {
-            console.warn("⚠️ optionsData为空，跳过期权数据更新");
+        } else if (!optionsData) {
+            if (pcRatioEl) pcRatioEl.innerText = "N/A";
+            if (pcSignal) pcSignal.innerText = "";
+            if (ivEl) ivEl.innerText = "N/A";
+            if (ivSignal) ivSignal.innerText = "";
+            console.warn("⚠️ optionsData为空");
         }
         
         // Analyst Ratings
-        if (analystRatings) {
-            const analystEl = document.getElementById("adv-analyst");
-            const analystCountEl = document.getElementById("adv-analyst-count");
-            const targetPriceEl = document.getElementById("adv-target-price");
-            const upsideEl = document.getElementById("adv-upside");
-            
-            if (analystEl) analystEl.innerText = analystRatings.consensus;
+        const analystEl = document.getElementById("adv-analyst");
+        const analystCountEl = document.getElementById("adv-analyst-count");
+        const targetPriceEl = document.getElementById("adv-target-price");
+        const upsideEl = document.getElementById("adv-upside");
+        
+        if (analystRatings && analystEl) {
+            analystEl.innerText = analystRatings.consensus;
             if (analystCountEl) analystCountEl.innerText = `(${analystRatings.totalAnalysts}家)`;
             if (targetPriceEl) targetPriceEl.innerText = `$${analystRatings.targetMean.toFixed(2)}`;
             
-            if (upsideEl) {
+            if (upsideEl && analystRatings.upside !== "N/A") {
                 upsideEl.innerText = `(${analystRatings.upside}%)`;
                 upsideEl.style.color = parseFloat(analystRatings.upside) > 0 ? "#4caf50" : "#f44336";
             }
-        } else {
-            console.warn("⚠️ analystRatings为空，跳过分析师评级更新");
+        } else if (!analystRatings) {
+            if (analystEl) analystEl.innerText = "N/A";
+            if (analystCountEl) analystCountEl.innerText = "";
+            if (targetPriceEl) targetPriceEl.innerText = "N/A";
+            if (upsideEl) upsideEl.innerText = "";
+            console.warn("⚠️ analystRatings为空");
         }
         
         // Institutional Data
-        if (institutionalData) {
-            const institutionEl = document.getElementById("adv-institution");
-            const trendEl = document.getElementById("adv-institution-trend");
-            
-            if (institutionEl) institutionEl.innerText = institutionalData.institutionOwnership;
+        const institutionEl = document.getElementById("adv-institution");
+        const trendEl = document.getElementById("adv-institution-trend");
+        
+        if (institutionalData && institutionEl) {
+            institutionEl.innerText = institutionalData.institutionOwnership;
             if (trendEl) {
                 trendEl.innerText = institutionalData.institutionalTrend;
                 trendEl.style.color = institutionalData.institutionalTrend.includes("增持") ? "#4caf50" : 
                                       institutionalData.institutionalTrend.includes("减持") ? "#f44336" : "#aaa";
             }
-        } else {
-            console.warn("⚠️ institutionalData为空，跳过机构持股更新");
+        } else if (!institutionalData) {
+            if (institutionEl) institutionEl.innerText = "N/A";
+            if (trendEl) trendEl.innerText = "";
+            console.warn("⚠️ institutionalData为空");
         }
         
         // Market Sentiment
-        if (sentiment) {
-            const sentimentScoreEl = document.getElementById("adv-sentiment-score");
-            const levelEl = document.getElementById("adv-sentiment-level");
-            
-            if (sentimentScoreEl) sentimentScoreEl.innerText = sentiment.score + "/100";
+        const sentimentScoreEl = document.getElementById("adv-sentiment-score");
+        const levelEl = document.getElementById("adv-sentiment-level");
+        
+        if (sentiment && sentimentScoreEl) {
+            sentimentScoreEl.innerText = sentiment.score + "/100";
             if (levelEl) {
                 levelEl.innerText = `(${sentiment.level})`;
                 const score = parseFloat(sentiment.score);
@@ -929,9 +949,13 @@ class TradingAssistant {
                 else if (sentiment.level.includes("悲观")) { icon = '😔'; color = '#64b5f6'; }
                 sentimentEl.innerHTML = `<span style="color:${color}">${icon} ${sentiment.score}/100</span>`;
             }
-        } else {
-            console.warn("⚠️ sentiment为空，跳过市场情绪更新");
+        } else if (!sentiment) {
+            if (sentimentScoreEl) sentimentScoreEl.innerText = "N/A";
+            if (levelEl) levelEl.innerText = "";
+            console.warn("⚠️ sentiment为空");
         }
+        
+        console.log("✅ UI更新完成");
     }
 
     startMonitoring() {
@@ -952,10 +976,23 @@ class TradingAssistant {
         const symbol = this.state.symbol;
         if (!symbol || symbol === "DETECTED" || symbol === "扫描中...") {
             console.log("⏳ 等待symbol识别...", symbol);
+            // 显示在UI上
+            const loadingEl = document.getElementById("advanced-loading");
+            if (loadingEl) {
+                loadingEl.style.display = "block";
+                loadingEl.innerHTML = `⏳ 等待股票识别...<br/><span style="font-size:9px;">(当前: ${symbol})</span>`;
+            }
             return;
         }
         
         console.log("🔄 开始更新高级数据:", symbol);
+        
+        // 显示加载中
+        const loadingEl = document.getElementById("advanced-loading");
+        if (loadingEl) {
+            loadingEl.style.display = "block";
+            loadingEl.innerHTML = `⏳ 正在加载 ${symbol} 数据...<br/><span style="font-size:9px;">(预计3-5秒)</span>`;
+        }
         
         try {
             // 获取所有高级数据（独立处理，失败不影响其他）
@@ -965,39 +1002,81 @@ class TradingAssistant {
             let institutionalData = null;
             let sentiment = null;
             
+            const errors = [];
+            
             try {
+                console.log("📊 正在获取详细报价...");
                 detailedQuote = await this.fetchDetailedQuote(symbol);
-                console.log("📊 详细报价:", detailedQuote ? "成功" : "失败");
+                console.log("📊 详细报价:", detailedQuote ? "✅ 成功" : "⚠️ 返回null");
+                if (detailedQuote) {
+                    console.log("   - 成交量:", detailedQuote.volume);
+                    console.log("   - 量比:", detailedQuote.volumeRatio);
+                    console.log("   - 52周位置:", detailedQuote.fiftyTwoWeekPosition);
+                }
             } catch (e) {
-                console.warn("❌ 详细报价失败:", e.message);
+                console.error("❌ 详细报价失败:", e);
+                errors.push(`成交量: ${e.message}`);
             }
             
             try {
+                console.log("🎲 正在获取期权数据...");
                 optionsData = await this.fetchOptionsData(symbol);
-                console.log("🎲 期权数据:", optionsData ? "成功" : "失败");
+                console.log("🎲 期权数据:", optionsData ? "✅ 成功" : "⚠️ 返回null");
+                if (optionsData) {
+                    console.log("   - P/C比率:", optionsData.pcRatio);
+                    console.log("   - 隐含波动率:", optionsData.impliedVolatility);
+                }
             } catch (e) {
-                console.warn("❌ 期权数据失败:", e.message);
+                console.error("❌ 期权数据失败:", e);
+                errors.push(`期权: ${e.message}`);
             }
             
             try {
+                console.log("👔 正在获取分析师评级...");
                 analystRatings = await this.fetchAnalystRatings(symbol);
-                console.log("👔 分析师评级:", analystRatings ? "成功" : "失败");
+                console.log("👔 分析师评级:", analystRatings ? "✅ 成功" : "⚠️ 返回null");
+                if (analystRatings) {
+                    console.log("   - 共识:", analystRatings.consensus);
+                    console.log("   - 目标价:", analystRatings.targetMean);
+                }
             } catch (e) {
-                console.warn("❌ 分析师评级失败:", e.message);
+                console.error("❌ 分析师评级失败:", e);
+                errors.push(`分析师: ${e.message}`);
             }
             
             try {
+                console.log("🏦 正在获取机构持股...");
                 institutionalData = await this.fetchInstitutionalData(symbol);
-                console.log("🏦 机构持股:", institutionalData ? "成功" : "失败");
+                console.log("🏦 机构持股:", institutionalData ? "✅ 成功" : "⚠️ 返回null");
+                if (institutionalData) {
+                    console.log("   - 持股比例:", institutionalData.institutionOwnership);
+                    console.log("   - 趋势:", institutionalData.institutionalTrend);
+                }
             } catch (e) {
-                console.warn("❌ 机构持股失败:", e.message);
+                console.error("❌ 机构持股失败:", e);
+                errors.push(`机构: ${e.message}`);
             }
             
             try {
+                console.log("😊 正在计算市场情绪...");
                 sentiment = await this.calculateMarketSentiment(symbol, detailedQuote);
-                console.log("😊 市场情绪:", sentiment ? "成功" : "失败");
+                console.log("😊 市场情绪:", sentiment ? "✅ 成功" : "⚠️ 返回null");
+                if (sentiment) {
+                    console.log("   - 分值:", sentiment.score);
+                    console.log("   - 等级:", sentiment.level);
+                }
             } catch (e) {
-                console.warn("❌ 市场情绪失败:", e.message);
+                console.error("❌ 市场情绪失败:", e);
+                errors.push(`情绪: ${e.message}`);
+            }
+            
+            // 显示错误信息在加载提示中
+            if (errors.length > 0 && loadingEl) {
+                const errorMsg = errors.slice(0, 3).join("<br/>");
+                loadingEl.innerHTML = `⚠️ 部分数据获取失败<br/><span style="font-size:8px; color:#f44336;">${errorMsg}</span>`;
+                setTimeout(() => {
+                    if (loadingEl) loadingEl.style.display = "none";
+                }, 5000);
             }
             
             // 更新UI（即使部分数据为null也更新）
@@ -1007,6 +1086,11 @@ class TradingAssistant {
             console.log("✅ 高级数据UI已更新:", symbol);
         } catch (error) {
             console.error("❌ 高级数据更新失败:", error);
+            const loadingEl = document.getElementById("advanced-loading");
+            if (loadingEl) {
+                loadingEl.style.display = "block";
+                loadingEl.innerHTML = `❌ 加载失败<br/><span style="font-size:9px; color:#f44336;">${error.message}</span>`;
+            }
         }
     }
 
