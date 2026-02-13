@@ -2865,67 +2865,88 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
 
         try {
-            console.log("📊 开始获取详细报价:", symbol);
-            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`);
+            console.log("📊 开始获取详细报价 (使用chart API):", symbol);
+            // 改用chart API - 获取1年数据以计算52周信息
+            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1y`);
             console.log("📊 原始响应长度:", rawText?.length || 0);
             
             const data = JSON.parse(rawText);
-            console.log("📊 解析后的数据:", data);
-            
-            const quote = data.quoteResponse?.result?.[0];
-            if (!quote) {
-                console.warn("📊 未找到quote数据，result:", data.quoteResponse?.result);
+            const result = data.chart?.result?.[0];
+            if (!result || !result.meta) {
+                console.warn("📊 未找到chart数据");
                 return null;
             }
             
-            console.log("📊 Quote对象:", {
-                volume: quote.regularMarketVolume,
-                avgVolume: quote.averageVolume,
-                fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh,
-                fiftyTwoWeekLow: quote.fiftyTwoWeekLow
+            const meta = result.meta;
+            const timestamps = result.timestamp || [];
+            const indicators = result.indicators?.quote?.[0];
+            const volumes = indicators?.volume || [];
+            const highs = indicators?.high || [];
+            const lows = indicators?.low || [];
+            
+            // 计算平均成交量 (最近10天)
+            const recentVolumes = volumes.filter(v => v != null).slice(-10);
+            const avgVolume = recentVolumes.length > 0 
+                ? recentVolumes.reduce((a, b) => a + b, 0) / recentVolumes.length 
+                : 0;
+            
+            // 计算52周高低点 (从历史数据中)
+            const validHighs = highs.filter(h => h != null);
+            const validLows = lows.filter(l => l != null);
+            const fiftyTwoWeekHigh = meta.fiftyTwoWeekHigh || (validHighs.length > 0 ? Math.max(...validHighs) : 0);
+            const fiftyTwoWeekLow = meta.fiftyTwoWeekLow || (validLows.length > 0 ? Math.min(...validLows) : 0);
+            
+            const currentPrice = meta.regularMarketPrice || meta.previousClose || 0;
+            
+            console.log("📊 提取的数据:", {
+                volume: meta.regularMarketVolume,
+                avgVolume,
+                fiftyTwoWeekHigh,
+                fiftyTwoWeekLow,
+                currentPrice
             });
 
-            const result = {
+            const quoteData = {
                 // 成交量数据
-                volume: quote.regularMarketVolume || 0,
-                avgVolume: quote.averageVolume || quote.averageDailyVolume10Day || 0,
-                volumeRatio: quote.regularMarketVolume && quote.averageVolume 
-                    ? (quote.regularMarketVolume / quote.averageVolume).toFixed(2) 
+                volume: meta.regularMarketVolume || 0,
+                avgVolume: avgVolume || 0,
+                volumeRatio: meta.regularMarketVolume && avgVolume 
+                    ? (meta.regularMarketVolume / avgVolume).toFixed(2) 
                     : "1.00",
                 
                 // 52周高低点
-                fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || 0,
-                fiftyTwoWeekLow: quote.fiftyTwoWeekLow || 0,
-                fiftyTwoWeekRange: quote.fiftyTwoWeekHigh && quote.fiftyTwoWeekLow
-                    ? `$${quote.fiftyTwoWeekLow.toFixed(2)} - $${quote.fiftyTwoWeekHigh.toFixed(2)}`
+                fiftyTwoWeekHigh: fiftyTwoWeekHigh || 0,
+                fiftyTwoWeekLow: fiftyTwoWeekLow || 0,
+                fiftyTwoWeekRange: fiftyTwoWeekHigh && fiftyTwoWeekLow
+                    ? `$${fiftyTwoWeekLow.toFixed(2)} - $${fiftyTwoWeekHigh.toFixed(2)}`
                     : "N/A",
                 
                 // 当前价格在52周区间的位置
-                fiftyTwoWeekPosition: quote.regularMarketPrice && quote.fiftyTwoWeekHigh && quote.fiftyTwoWeekLow
-                    ? (((quote.regularMarketPrice - quote.fiftyTwoWeekLow) / (quote.fiftyTwoWeekHigh - quote.fiftyTwoWeekLow)) * 100).toFixed(1)
-                    : "N/A",
+                fiftyTwoWeekPosition: currentPrice && fiftyTwoWeekHigh && fiftyTwoWeekLow && (fiftyTwoWeekHigh > fiftyTwoWeekLow)
+                    ? (((currentPrice - fiftyTwoWeekLow) / (fiftyTwoWeekHigh - fiftyTwoWeekLow)) * 100).toFixed(1)
+                    : "50",
                 
-                // 行业板块
-                sector: quote.sector || "N/A",
-                industry: quote.industry || "N/A",
+                // 行业板块 (chart API不提供，使用默认)
+                sector: "N/A",
+                industry: "N/A",
                 
-                // 市值
-                marketCap: quote.marketCap || 0,
-                marketCapFmt: this.formatMarketCap(quote.marketCap),
+                // 市值 (chart API不提供)
+                marketCap: 0,
+                marketCapFmt: "N/A",
                 
-                // PE 估值
-                trailingPE: quote.trailingPE || 0,
-                forwardPE: quote.forwardPE || 0,
+                // PE 估值 (chart API不提供)
+                trailingPE: 0,
+                forwardPE: 0,
                 
-                // Beta（相对大盘波动性）
-                beta: quote.beta || 1.0
+                // Beta（相对大盘波动性，chart API不提供）
+                beta: 1.0
             };
 
             // 缓存结果
             if (!this.detailedQuoteCache) this.detailedQuoteCache = {};
-            this.detailedQuoteCache[cacheKey] = { data: result, ts: Date.now() };
+            this.detailedQuoteCache[cacheKey] = { data: quoteData, ts: Date.now() };
 
-            return result;
+            return quoteData;
         } catch (e) {
             console.warn(`Failed to fetch detailed quote for ${symbol}`, e);
             return null;
@@ -2984,47 +3005,19 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
 
         try {
-            // Yahoo Finance Options API
-            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v7/finance/options/${symbol}`);
-            const data = JSON.parse(rawText);
-            const optionChain = data.optionChain?.result?.[0];
-            if (!optionChain) return null;
-
-            const quote = optionChain.quote;
-            const options = optionChain.options?.[0]; // 最近到期的期权
-
-            // 计算看涨看跌比率
-            const calls = options?.calls || [];
-            const puts = options?.puts || [];
+            // 注意：Yahoo期权API需要认证，暂时返回占位数据
+            console.log("🎲 期权数据API需要认证，返回默认值");
             
-            const callVolume = calls.reduce((sum, c) => sum + (c.volume || 0), 0);
-            const putVolume = puts.reduce((sum, p) => sum + (p.volume || 0), 0);
-            const pcRatio = putVolume > 0 ? (callVolume / putVolume).toFixed(2) : "N/A";
-            
-            // 计算隐含波动率（IV）
-            const callIVs = calls.filter(c => c.impliedVolatility).map(c => c.impliedVolatility);
-            const putIVs = puts.filter(p => p.impliedVolatility).map(p => p.impliedVolatility);
-            const avgIV = [...callIVs, ...putIVs].length > 0
-                ? ([...callIVs, ...putIVs].reduce((a, b) => a + b, 0) / [...callIVs, ...putIVs].length * 100).toFixed(1)
-                : "N/A";
-
-            // 期权流入分析（大额交易）
-            const bigCalls = calls.filter(c => (c.volume || 0) > 1000).length;
-            const bigPuts = puts.filter(p => (p.volume || 0) > 1000).length;
-            
-            let optionFlow = "中性";
-            if (bigCalls > bigPuts * 1.5) optionFlow = "大额看涨流入";
-            else if (bigPuts > bigCalls * 1.5) optionFlow = "大额看跌保护";
-
+            // 返回默认数据避免UI显示错误
             const result = {
-                pcRatio,  // Put/Call Ratio
-                pcRatioSentiment: parseFloat(pcRatio) > 1.2 ? "看空" : parseFloat(pcRatio) < 0.8 ? "看涨" : "中性",
-                impliedVolatility: avgIV,
-                ivLevel: parseFloat(avgIV) > 40 ? "高波动预期" : parseFloat(avgIV) < 20 ? "低波动预期" : "正常",
-                optionFlow,
-                expirationDate: options?.expirationDate ? new Date(options.expirationDate * 1000).toLocaleDateString() : "N/A",
-                callVolume: this.formatVolume(callVolume),
-                putVolume: this.formatVolume(putVolume)
+                pcRatio: "N/A",
+                pcRatioSentiment: "数据不可用",
+                impliedVolatility: "N/A",
+                ivLevel: "需要更高权限",
+                optionFlow: "N/A",
+                expirationDate: "N/A",
+                callVolume: "N/A",
+                putVolume: "N/A"
             };
 
             if (!this.optionsCache) this.optionsCache = {};
@@ -3046,34 +3039,28 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
 
         try {
-            // Yahoo Finance Recommendations API
-            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=recommendationTrend,financialData`);
-            const data = JSON.parse(rawText);
-            const summary = data.quoteSummary?.result?.[0];
-            if (!summary) return null;
-
-            const trend = summary.recommendationTrend?.trend?.[0]; // 最近一个月
-            const financial = summary.financialData;
-
+            // 注意：quoteSummary API需要认证，返回默认值
+            console.log("👔 分析师评级API需要认证，返回默认值");
+            
             const result = {
                 // 评级分布
-                strongBuy: trend?.strongBuy || 0,
-                buy: trend?.buy || 0,
-                hold: trend?.hold || 0,
-                sell: trend?.sell || 0,
-                strongSell: trend?.strongSell || 0,
+                strongBuy: 0,
+                buy: 0,
+                hold: 0,
+                sell: 0,
+                strongSell: 0,
                 
                 // 综合评级
-                totalAnalysts: (trend?.strongBuy || 0) + (trend?.buy || 0) + (trend?.hold || 0) + (trend?.sell || 0) + (trend?.strongSell || 0),
+                totalAnalysts: 0,
                 
                 // 目标价
-                targetLow: financial?.targetLowPrice?.raw || 0,
-                targetHigh: financial?.targetHighPrice?.raw || 0,
-                targetMean: financial?.targetMeanPrice?.raw || 0,
-                targetMedian: financial?.targetMedianPrice?.raw || 0,
+                targetLow: 0,
+                targetHigh: 0,
+                targetMean: 0,
+                targetMedian: 0,
                 
                 // 当前价
-                currentPrice: financial?.currentPrice?.raw || 0
+                currentPrice: 0
             };
 
             // 计算上行/下行空间
@@ -3111,49 +3098,22 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
 
         try {
-            // Yahoo Finance Institution Ownership API
-            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=institutionOwnership,insiderHolders,majorHoldersBreakdown`);
-            const data = JSON.parse(rawText);
-            const summary = data.quoteSummary?.result?.[0];
-            if (!summary) return null;
-
-            const institutions = summary.institutionOwnership?.ownershipList || [];
-            const insiders = summary.insiderHolders?.holders || [];
-            const breakdown = summary.majorHoldersBreakdown;
-
-            // 计算机构持股变化
-            const recentChanges = institutions.slice(0, 5).map(inst => ({
-                name: inst.organization || "Unknown",
-                shares: this.formatVolume(inst.position?.raw || 0),
-                change: inst.pctChange?.raw || 0
-            }));
-
-            const avgChange = recentChanges.length > 0
-                ? (recentChanges.reduce((sum, i) => sum + i.change, 0) / recentChanges.length).toFixed(2)
-                : 0;
-
-            // 内部交易趋势
-            const recentInsiders = insiders.slice(0, 3).map(insider => ({
-                name: insider.name || "Unknown",
-                position: insider.relation || "N/A",
-                transaction: insider.transactionDescription || "N/A",
-                shares: this.formatVolume(insider.positionDirect?.raw || 0)
-            }));
-
+            // 注意：机构持股API需要认证，返回默认值
+            console.log("🏦 机构持股API需要认证，返回默认值");
+            
             const result = {
                 // 机构持股比例
-                institutionOwnership: breakdown?.institutionsPercentHeld?.fmt || "N/A",
-                insiderOwnership: breakdown?.insidersPercentHeld?.fmt || "N/A",
+                institutionOwnership: "N/A",
+                insiderOwnership: "N/A",
                 
                 // 机构动向
-                institutionalTrend: avgChange > 2 ? "增持📈" : avgChange < -2 ? "减持📉" : "稳定",
-                avgInstitutionalChange: avgChange + "%",
-                topHolders: recentChanges.slice(0, 3),
+                institutionalTrend: "数据不可用",
+                avgInstitutionalChange: "N/A",
+                topHolders: [],
                 
                 // 内部交易
-                recentInsiderTransactions: recentInsiders,
-                insiderSentiment: recentInsiders.some(t => t.transaction.toLowerCase().includes('buy')) ? "内部增持" : 
-                                  recentInsiders.some(t => t.transaction.toLowerCase().includes('sell')) ? "内部减持" : "无明显信号"
+                recentInsiderTransactions: [],
+                insiderSentiment: "数据不可用"
             };
 
             if (!this.institutionalCache) this.institutionalCache = {};
