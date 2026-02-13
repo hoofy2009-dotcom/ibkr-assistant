@@ -46,7 +46,8 @@ class TradingAssistant {
             doubaoKey: "",
             claudeKey: "",
             chatgptKey: "",
-            grokKey: ""
+            grokKey: "",
+            finnhubKey: ""  // Finnhub免费API: https://finnhub.io/register
         };
             // Model overrides (user-specified)
             this.modelConfig = {
@@ -525,6 +526,11 @@ class TradingAssistant {
                         <input type="password" id="set-grok-key" placeholder="仅本地保存" autocomplete="off">
                     </div>
                     <div class="setting-item">
+                        <span>Finnhub Key:</span>
+                        <input type="password" id="set-finnhub-key" placeholder="免费注册: finnhub.io/register" autocomplete="off">
+                        <small style="display:block; color:#888; font-size:9px; margin-top:2px;">获取分析师评级和机构持股数据</small>
+                    </div>
+                    <div class="setting-item">
                         <span>豆包模型:</span>
                         <input type="text" id="set-doubao-model" class="model-input" placeholder="如 doubao-lite-1-5 或 ep-xxxxx" autocomplete="off">
                     </div>
@@ -594,6 +600,7 @@ class TradingAssistant {
         document.getElementById("set-claude-key").value = this.apiKeys.claudeKey || "";
         document.getElementById("set-chatgpt-key").value = this.apiKeys.chatgptKey || "";
         document.getElementById("set-grok-key").value = this.apiKeys.grokKey || "";
+        document.getElementById("set-finnhub-key").value = this.apiKeys.finnhubKey || "";
         document.getElementById("set-doubao-model").value = this.modelConfig.doubaoModel || AI_CONFIG.DOUBAO_MODEL;
         document.getElementById("set-autotrade").checked = !!this.settings.autoTradeEnabled;
 
@@ -3030,7 +3037,7 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
     }
 
-    // 2. 分析师评级和目标价
+    // 2. 分析师评级和目标价（使用Finnhub API）
     async fetchAnalystRatings(symbol) {
         const cacheKey = `analyst_${symbol}`;
         const cached = this.analystCache?.[cacheKey];
@@ -3039,28 +3046,50 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
 
         try {
-            // 注意：quoteSummary API需要认证，返回默认值
-            console.log("👔 分析师评级API需要认证，返回默认值");
+            // 检查API密钥
+            if (!this.apiKeys.finnhubKey) {
+                console.warn("👔 Finnhub API密钥未配置");
+                return this.getDefaultAnalystData();
+            }
+            
+            console.log("👔 使用Finnhub API获取分析师评级:", symbol);
+            
+            // Finnhub分析师推荐API
+            const recommendUrl = `https://finnhub.io/api/v1/stock/recommendation?symbol=${symbol}&token=${this.apiKeys.finnhubKey}`;
+            const recommendText = await this.proxyFetch(recommendUrl);
+            const recommendations = JSON.parse(recommendText);
+            
+            // Finnhub价格目标API
+            const targetUrl = `https://finnhub.io/api/v1/stock/price-target?symbol=${symbol}&token=${this.apiKeys.finnhubKey}`;
+            const targetText = await this.proxyFetch(targetUrl);
+            const priceTarget = JSON.parse(targetText);
+            
+            // 解析最新推荐（第一条是最新的）
+            const latest = recommendations?.[0];
+            if (!latest) {
+                console.warn("👔 Finnhub无分析师数据");
+                return this.getDefaultAnalystData();
+            }
             
             const result = {
                 // 评级分布
-                strongBuy: 0,
-                buy: 0,
-                hold: 0,
-                sell: 0,
-                strongSell: 0,
+                strongBuy: latest.strongBuy || 0,
+                buy: latest.buy || 0,
+                hold: latest.hold || 0,
+                sell: latest.sell || 0,
+                strongSell: latest.strongSell || 0,
                 
                 // 综合评级
-                totalAnalysts: 0,
+                totalAnalysts: (latest.strongBuy || 0) + (latest.buy || 0) + (latest.hold || 0) + (latest.sell || 0) + (latest.strongSell || 0),
                 
                 // 目标价
-                targetLow: 0,
-                targetHigh: 0,
-                targetMean: 0,
-                targetMedian: 0,
+                targetLow: priceTarget?.targetLow || 0,
+                targetHigh: priceTarget?.targetHigh || 0,
+                targetMean: priceTarget?.targetMean || 0,
+                targetMedian: priceTarget?.targetMedian || 0,
                 
                 // 当前价
-                currentPrice: 0
+                currentPrice: this.state.price || 0
             };
 
             // 计算上行/下行空间
@@ -3082,6 +3111,7 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             if (!this.analystCache) this.analystCache = {};
             this.analystCache[cacheKey] = { data: result, ts: Date.now() };
 
+            console.log("👔 Finnhub分析师数据:", result);
             return result;
         } catch (e) {
             console.warn(`Failed to fetch analyst ratings for ${symbol}`, e);
@@ -3089,7 +3119,7 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
     }
 
-    // 3. 机构持股和内部交易
+    // 3. 机构持股和内部交易（使用Finnhub API）
     async fetchInstitutionalData(symbol) {
         const cacheKey = `institutional_${symbol}`;
         const cached = this.institutionalCache?.[cacheKey];
@@ -3098,20 +3128,49 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
 
         try {
-            // 注意：机构持股API需要认证，返回默认值
-            console.log("🏦 机构持股API需要认证，返回默认值");
+            // 检查API密钥
+            if (!this.apiKeys.finnhubKey) {
+                console.warn("🏦 Finnhub API密钥未配置");
+                return this.getDefaultInstitutionalData();
+            }
+            
+            console.log("🏦 使用Finnhub API获取机构持股:", symbol);
+            
+            // Finnhub机构持股API
+            const url = `https://finnhub.io/api/v1/stock/ownership?symbol=${symbol}&token=${this.apiKeys.finnhubKey}`;
+            const rawText = await this.proxyFetch(url);
+            const data = JSON.parse(rawText);
+            
+            if (!data || !data.ownership) {
+                console.warn("🏦 Finnhub无机构持股数据");
+                return this.getDefaultInstitutionalData();
+            }
+            
+            const ownership = data.ownership || [];
+            
+            // 提取前5大机构
+            const topHolders = ownership.slice(0, 5).map(inst => ({
+                name: inst.name || "Unknown",
+                shares: this.formatVolume(inst.share || 0),
+                change: inst.change || 0
+            }));
+            
+            // 计算平均变化
+            const avgChange = topHolders.length > 0
+                ? (topHolders.reduce((sum, h) => sum + (h.change || 0), 0) / topHolders.length).toFixed(2)
+                : 0;
             
             const result = {
                 // 机构持股比例
-                institutionOwnership: "N/A",
-                insiderOwnership: "N/A",
+                institutionOwnership: data.institutionOwnershipPercent ? `${data.institutionOwnershipPercent.toFixed(2)}%` : "N/A",
+                insiderOwnership: "N/A", // Finnhub不提供内部人持股比例
                 
                 // 机构动向
-                institutionalTrend: "数据不可用",
-                avgInstitutionalChange: "N/A",
-                topHolders: [],
+                institutionalTrend: avgChange > 2 ? "增持📈" : avgChange < -2 ? "减持📉" : "稳定",
+                avgInstitutionalChange: avgChange + "%",
+                topHolders: topHolders,
                 
-                // 内部交易
+                // 内部交易（Finnhub提供但需额外API调用）
                 recentInsiderTransactions: [],
                 insiderSentiment: "数据不可用"
             };
@@ -3124,6 +3183,38 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             console.warn(`Failed to fetch institutional data for ${symbol}`, e);
             return null;
         }
+    }
+
+    // 辅助函数：返回默认分析师数据
+    getDefaultAnalystData() {
+        return {
+            strongBuy: 0,
+            buy: 0,
+            hold: 0,
+            sell: 0,
+            strongSell: 0,
+            totalAnalysts: 0,
+            targetLow: 0,
+            targetHigh: 0,
+            targetMean: 0,
+            targetMedian: 0,
+            currentPrice: 0,
+            upside: "N/A",
+            consensus: "数据不可用"
+        };
+    }
+
+    // 辅助函数：返回默认机构持股数据
+    getDefaultInstitutionalData() {
+        return {
+            institutionOwnership: "N/A",
+            insiderOwnership: "N/A",
+            institutionalTrend: "数据不可用",
+            avgInstitutionalChange: "N/A",
+            topHolders: [],
+            recentInsiderTransactions: [],
+            insiderSentiment: "数据不可用"
+        };
     }
 
     // 4. 市场情绪指标（简化版 - 基于技术指标综合）
@@ -3891,7 +3982,8 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             doubaoKey: document.getElementById("set-doubao-key").value.trim(),
             claudeKey: document.getElementById("set-claude-key").value.trim(),
             chatgptKey: document.getElementById("set-chatgpt-key").value.trim(),
-            grokKey: document.getElementById("set-grok-key").value.trim()
+            grokKey: document.getElementById("set-grok-key").value.trim(),
+            finnhubKey: document.getElementById("set-finnhub-key").value.trim()
         };
         
         // Auto-Trade Settings
