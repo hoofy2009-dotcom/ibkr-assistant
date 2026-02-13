@@ -441,11 +441,6 @@ class TradingAssistant {
                     <div class="analysis-actions">
                         <button id="btn-copy-analysis" class="btn-copy">复制结果</button>
                     </div>
-                    
-                    <!-- Mini Watchlist (Pinned to bottom) -->
-                    <div id="mini-watchlist" class="mini-watchlist" style="color:#666; text-align:center;">
-                        Loading Watchlist...
-                    </div>
                 </div>
             </div>
 
@@ -562,6 +557,17 @@ class TradingAssistant {
                     </div>
                 </div>
             </div>
+            
+            <!-- Side Watchlist Panel -->
+            <div id="side-watchlist-panel" class="side-watchlist-panel">
+                <div class="side-wl-header">
+                    <span class="side-wl-title">📋 Watchlist</span>
+                    <button class="icon-btn" id="toggle-side-wl">_</button>
+                </div>
+                <div id="mini-watchlist" class="mini-watchlist" style="color:#666; text-align:center;">
+                    Loading Watchlist...
+                </div>
+            </div>
         `;
         document.body.appendChild(this.panel);
 
@@ -600,6 +606,9 @@ class TradingAssistant {
         
         // Advanced Data Toggle
         document.getElementById("advanced-data-toggle").onclick = () => this.toggleAdvancedData();
+        
+        // Side Watchlist Toggle
+        document.getElementById("toggle-side-wl").onclick = () => this.toggleSideWatchlist();
         
         // Draggable Logic
         this.initDrag();
@@ -716,6 +725,18 @@ class TradingAssistant {
         } else {
             content.style.display = "none";
             icon.innerText = "▶ 点击展开";
+        }
+    }
+
+    toggleSideWatchlist() {
+        const panel = document.getElementById("side-watchlist-panel");
+        const wlContent = document.getElementById("mini-watchlist");
+        if (wlContent.style.display === "none") {
+            wlContent.style.display = "block";
+            panel.style.width = "200px";
+        } else {
+            wlContent.style.display = "none";
+            panel.style.width = "40px";
         }
     }
 
@@ -849,7 +870,42 @@ class TradingAssistant {
         this.checkInterval = setInterval(() => {
             this.updateData();
         }, 800); // Faster polling for pro feel
+        
+        // 周期性更新高级数据 (每60秒)
+        this.advancedDataInterval = setInterval(() => {
+            this.updateAdvancedDataPeriodically();
+        }, 60000); // 每分钟更新一次
+        
+        // 首次立即更新高级数据
+        setTimeout(() => this.updateAdvancedDataPeriodically(), 3000);
     }
+
+    async updateAdvancedDataPeriodically() {
+        const symbol = this.state.symbol;
+        if (!symbol || symbol === "DETECTED" || symbol === "扫描中...") return;
+        
+        try {
+            // 获取所有高级数据
+            const [detailedQuote, optionsData, analystRatings, institutionalData] = await Promise.all([
+                this.fetchDetailedQuote(symbol),
+                this.fetchOptionsData(symbol),
+                this.fetchAnalystRatings(symbol),
+                this.fetchInstitutionalData(symbol)
+            ]);
+            
+            // 计算市场情绪
+            const sentiment = await this.calculateMarketSentiment(symbol, detailedQuote);
+            
+            // 更新UI
+            this.updateMacroRibbon();
+            this.updateAdvancedData(detailedQuote, optionsData, analystRatings, institutionalData, sentiment);
+            
+            console.log("✅ 高级数据已更新:", symbol);
+        } catch (error) {
+            console.error("❌ 高级数据更新失败:", error);
+        }
+    }
+
 
     updateData() {
         // Detect URL change to force symbol reset
@@ -1053,6 +1109,11 @@ class TradingAssistant {
             if(canvas) {
                 const ctx = canvas.getContext("2d");
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            // 立即更新高级数据（symbol切换时）
+            if (symbol !== "DETECTED") {
+                setTimeout(() => this.updateAdvancedDataPeriodically(), 1000);
             }
         } else {
             // 优先使用 Yahoo API 的真实日内高低点

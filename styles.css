@@ -11,7 +11,7 @@
   font-family: 'Consolas', 'Monaco', monospace; /* 等宽字体方便看数字 */
   z-index: 2147483647;
   padding: 0;
-  font-size: 15px; /* Increased font size */
+  font-size: 11px; /* 统一字体大小 */
   user-select: none; /* 防止拖拽时选中文字 */
   border-radius: 4px;
 }
@@ -30,7 +30,7 @@
 .ibkr-assistant-title {
   font-weight: 600;
   color: #007acc;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .ibkr-assistant-content {
@@ -71,8 +71,8 @@
   line-height: 1.4;
   color: #ccc;
   font-family: 'Segoe UI', sans-serif; /* More readable for text */
-  /* max-height: 80px; Removed for full view */
-  /* overflow-y: auto; Removed for full view */
+  max-height: 200px;
+  overflow-y: auto;
   min-height: 40px;
 }
 .analysis-actions {
@@ -175,7 +175,7 @@
     flex-direction: column;
 }
 .modal-header {
-    font-size: 14px;
+    font-size: 11px;
     font-weight: bold;
     margin-bottom: 10px;
     border-bottom: 1px solid #333;
@@ -227,7 +227,7 @@
     padding-top: 5px;
     padding-right: 5px; /* Add padding for scrollbar */
     border-top: 1px solid #333;
-    font-size: 13px; /* Slightly larger */
+    font-size: 11px;
     /* REMOVED max-height and overflow to show all items directly */
     max-height: none; 
     overflow-y: visible;
@@ -298,7 +298,7 @@
     border: none;
     color: #888;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 11px;
     padding: 0 4px;
 }
 .icon-btn:hover { color: #fff; }
@@ -354,7 +354,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 16px;
     cursor: pointer;
     box-shadow: 0 4px 10px rgba(0,0,0,0.5);
     z-index: 2147483647;
@@ -387,7 +387,7 @@
 }
 
 .ibkr-ai-popup-title {
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
     color: #ff9800;
 }
@@ -397,13 +397,13 @@
     color: #888;
     background: none;
     border: none;
-    font-size: 14px;
+    font-size: 11px;
 }
 .ibkr-ai-popup-close:hover { color: #fff; }
 
 .ibkr-ai-popup-content {
     padding: 12px;
-    font-size: 13px;
+    font-size: 11px;
     color: #eee;
     line-height: 1.5;
     max-height: 400px;
@@ -607,4 +607,58 @@
 .adv-signal {
     font-size: 10px;
     margin-left: 4px;
+}
+
+/* --- Side Watchlist Panel (Right Side) --- */
+.side-watchlist-panel {
+    position: fixed;
+    top: 100px;
+    right: 290px; /* 主面板右侧 */
+    width: 200px;
+    background-color: #121212;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-right: 3px solid #ff9800;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    font-family: 'Consolas', 'Monaco', monospace;
+    z-index: 2147483646; /* 比主面板低一层 */
+    padding: 0;
+    font-size: 11px;
+    border-radius: 4px;
+    max-height: 80vh;
+    overflow-y: auto;
+    transition: width 0.3s ease;
+}
+
+.side-wl-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background-color: #1f1f1f;
+    border-bottom: 1px solid #333;
+    border-radius: 4px 4px 0 0;
+}
+
+.side-wl-title {
+    font-weight: 600;
+    color: #ff9800;
+    font-size: 11px;
+}
+
+.side-watchlist-panel .mini-watchlist {
+    margin-top: 0;
+    padding: 8px;
+    border-top: none;
+    max-height: calc(80vh - 40px);
+    overflow-y: auto;
+}
+
+.side-watchlist-panel::-webkit-scrollbar {
+    width: 4px;
+}
+
+.side-watchlist-panel::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 2px;
 }
