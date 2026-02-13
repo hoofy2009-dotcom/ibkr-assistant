@@ -6,28 +6,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         
         const headers = isHtmlPage ? {
             // HTML页面请求 - 完全模拟浏览器
+            // 注意: Sec-Fetch-* 头是禁止手动设置的，必须移除，否则会导致 "Refused to set unsafe header" 错误
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
             'Referer': 'https://finance.yahoo.com/',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-User': '?1',
-            'Upgrade-Insecure-Requests': '1',
             'Cache-Control': 'max-age=0'
         } : {
-            // API请求 - 保持原样
+            // API请求
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
             'Origin': 'https://finance.yahoo.com',
-            'Referer': 'https://finance.yahoo.com/',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-site'
+            'Referer': 'https://finance.yahoo.com/'
         };
 
         fetch(request.url, { 

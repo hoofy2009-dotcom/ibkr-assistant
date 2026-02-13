@@ -3099,7 +3099,7 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             }
 
             // 计算共识
-            if (result.totalAnalysts > 0) {
+            if (recommendations) {
                 const bullish = (result.strongBuy * 2 + result.buy);
                 const bearish = (result.strongSell * 2 + result.sell);
                 if (bullish > bearish * 1.5) result.consensus = "强烈买入";
@@ -3114,10 +3114,16 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 else result.consensus = "持有";
             }
 
-            if (!this.analystCache) this.analystCache = {};
-            this.analystCache[cacheKey] = { data: result, ts: Date.now() };
+            // Only cache if we actually got some data
+            if (recommendations || result.targetMean > 0) {
+                if (!this.analystCache) this.analystCache = {};
+                this.analystCache[cacheKey] = { data: result, ts: Date.now() };
+                console.log("👔 最终分析师数据 (已缓存):", result);
+            } else {
+                console.warn("👔 未获取到有效数据，不缓存结果");
+                console.log("👔 最终分析师数据 (未缓存):", result);
+            }
 
-            console.log("👔 最终分析师数据:", result);
             return result;
         } catch (e) {
             console.error("👔 分析师评级获取失败:", e);
