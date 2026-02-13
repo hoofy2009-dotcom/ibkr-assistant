@@ -508,3 +508,103 @@
 #ibkr-ai-chat-send:active {
     background-color: #f57c00;
 }
+
+/* --- Macro Ribbon Styles --- */
+.macro-ribbon {
+    background-color: #1a1a1a;
+    padding: 8px 10px;
+    margin: 8px 0;
+    border: 1px solid #333;
+    border-radius: 3px;
+}
+
+.macro-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    font-size: 11px;
+    text-align: center;
+}
+
+.macro-row > div {
+    padding: 4px;
+    background-color: #252525;
+    border-radius: 2px;
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* --- Advanced Data Section Styles --- */
+.advanced-data-section {
+    background-color: #1a1a1a;
+    margin: 8px 0;
+    border: 1px solid #333;
+    border-radius: 3px;
+}
+
+.advanced-data-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    cursor: pointer;
+    user-select: none;
+    background-color: #252525;
+    border-radius: 3px 3px 0 0;
+}
+
+.advanced-data-toggle:hover {
+    background-color: #2a2a2a;
+}
+
+.advanced-data-content {
+    padding: 10px;
+    border-top: 1px solid #333;
+}
+
+.adv-category {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.adv-category:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.adv-category-title {
+    font-size: 11px;
+    color: #ff9800;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.adv-data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+
+.adv-data-row:last-child {
+    margin-bottom: 0;
+}
+
+.adv-label {
+    color: #888;
+}
+
+.adv-value {
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.adv-signal {
+    font-size: 10px;
+    margin-left: 4px;
+}

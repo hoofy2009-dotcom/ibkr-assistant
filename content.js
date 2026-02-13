@@ -226,8 +226,14 @@ class TradingAssistant {
             </div>
             
             <div class="macro-ribbon" id="macro-ribbon">
-                <span>MACRO: Loading...</span>
-                <span>SENTIMENT: Calculating...</span>
+                <div class="macro-row">
+                    <span id="macro-market">📊 SPY: --</span>
+                    <span id="macro-vix">🔥 VIX: --</span>
+                </div>
+                <div class="macro-row">
+                    <span id="macro-sentiment">😐 情绪: --</span>
+                    <span id="macro-options">🎲 P/C: --</span>
+                </div>
             </div>
 
             <div class="ibkr-assistant-content">
@@ -314,6 +320,94 @@ class TradingAssistant {
                      <div class="data-row">
                         <span class="label">浮动盈亏</span>
                         <span class="value" id="assist-pnl">--</span>
+                    </div>
+                </div>
+
+                <!-- Advanced Data Section (Collapsible) -->
+                <div class="advanced-data-section" style="margin-top:8px; border-top:1px dashed #333; padding-top:5px;">
+                    <div class="data-row" style="cursor:pointer;" id="advanced-data-toggle">
+                        <span class="label" style="font-weight:bold; color:#64b5f6;">📊 高级数据</span>
+                        <span class="value" style="font-size:10px; color:#888;" id="advanced-toggle-icon">▶ 点击展开</span>
+                    </div>
+                    <div id="advanced-data-content" style="display:none; margin-top:5px;">
+                        <!-- Volume Analysis -->
+                        <div class="data-row" style="font-size:10px;">
+                            <span class="label">📈 成交量</span>
+                            <span class="value" id="adv-volume">--</span>
+                        </div>
+                        <div class="data-row" style="font-size:10px;">
+                            <span class="label">量比</span>
+                            <span class="value">
+                                <span id="adv-volume-ratio">--</span>
+                                <span id="adv-volume-signal" style="margin-left:5px; font-size:9px;"></span>
+                            </span>
+                        </div>
+                        
+                        <!-- 52 Week Position -->
+                        <div class="data-row" style="font-size:10px; margin-top:3px;">
+                            <span class="label">📍 52周位置</span>
+                            <span class="value">
+                                <span id="adv-52w-position">--</span>
+                                <span id="adv-52w-signal" style="margin-left:5px; font-size:9px;"></span>
+                            </span>
+                        </div>
+                        <div class="data-row" style="font-size:10px;">
+                            <span class="label">52周区间</span>
+                            <span class="value" id="adv-52w-range">--</span>
+                        </div>
+                        
+                        <!-- Options Data -->
+                        <div class="data-row" style="font-size:10px; margin-top:3px;">
+                            <span class="label">🎲 期权P/C</span>
+                            <span class="value">
+                                <span id="adv-pc-ratio">--</span>
+                                <span id="adv-pc-signal" style="margin-left:5px; font-size:9px;"></span>
+                            </span>
+                        </div>
+                        <div class="data-row" style="font-size:10px;">
+                            <span class="label">隐含波动率</span>
+                            <span class="value">
+                                <span id="adv-iv">--</span>
+                                <span id="adv-iv-signal" style="margin-left:5px; font-size:9px;"></span>
+                            </span>
+                        </div>
+                        
+                        <!-- Analyst Ratings -->
+                        <div class="data-row" style="font-size:10px; margin-top:3px;">
+                            <span class="label">👔 分析师</span>
+                            <span class="value">
+                                <span id="adv-analyst">--</span>
+                                <span id="adv-analyst-count" style="margin-left:5px; font-size:9px;"></span>
+                            </span>
+                        </div>
+                        <div class="data-row" style="font-size:10px;">
+                            <span class="label">目标价</span>
+                            <span class="value">
+                                <span id="adv-target-price">--</span>
+                                <span id="adv-upside" style="margin-left:5px; font-size:9px;"></span>
+                            </span>
+                        </div>
+                        
+                        <!-- Institutional Data -->
+                        <div class="data-row" style="font-size:10px; margin-top:3px;">
+                            <span class="label">🏦 机构持股</span>
+                            <span class="value" id="adv-institution">--</span>
+                        </div>
+                        <div class="data-row" style="font-size:10px;">
+                            <span class="label">机构动向</span>
+                            <span class="value">
+                                <span id="adv-institution-trend">--</span>
+                            </span>
+                        </div>
+                        
+                        <!-- Market Sentiment -->
+                        <div class="data-row" style="font-size:10px; margin-top:3px;">
+                            <span class="label">😊 市场情绪</span>
+                            <span class="value">
+                                <span id="adv-sentiment-score">--</span>
+                                <span id="adv-sentiment-level" style="margin-left:5px; font-size:9px;"></span>
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -504,6 +598,9 @@ class TradingAssistant {
         document.getElementById("btn-ask-ai").onclick = () => this.triggerAIAnalysis();
         document.getElementById("btn-copy-analysis").onclick = () => this.copyAnalysis();
         
+        // Advanced Data Toggle
+        document.getElementById("advanced-data-toggle").onclick = () => this.toggleAdvancedData();
+        
         // Draggable Logic
         this.initDrag();
     }
@@ -607,6 +704,144 @@ class TradingAssistant {
         } else {
             this.panel.style.display = "block";
             this.minimizedBtn.style.display = "none";
+        }
+    }
+
+    toggleAdvancedData() {
+        const content = document.getElementById("advanced-data-content");
+        const icon = document.getElementById("advanced-toggle-icon");
+        if (content.style.display === "none") {
+            content.style.display = "block";
+            icon.innerText = "▼ 收起";
+        } else {
+            content.style.display = "none";
+            icon.innerText = "▶ 点击展开";
+        }
+    }
+
+    // Update macro ribbon with real-time data
+    updateMacroRibbon() {
+        if (!this.macroCache) return;
+        
+        const { spy, vix, regime } = this.macroCache;
+        
+        // Update market section
+        const marketEl = document.getElementById("macro-market");
+        if (marketEl && spy) {
+            const color = spy.changePct > 0 ? '#4caf50' : spy.changePct < 0 ? '#f44336' : '#aaa';
+            marketEl.innerHTML = `<span style="color:${color}">📊 SPY ${spy.fmt}</span>`;
+        }
+        
+        // Update VIX section
+        const vixEl = document.getElementById("macro-vix");
+        if (vixEl) {
+            let color = '#4caf50';
+            let icon = '✅';
+            if (vix > 30) { color = '#ff5252'; icon = '🔥'; }
+            else if (vix > 20) { color = '#ff9800'; icon = '⚠️'; }
+            vixEl.innerHTML = `<span style="color:${color}">${icon} VIX ${vix.toFixed(1)}</span>`;
+        }
+    }
+
+    // Update advanced data section
+    updateAdvancedData(detailedQuote, optionsData, analystRatings, institutionalData, sentiment) {
+        // Volume Analysis
+        if (detailedQuote) {
+            document.getElementById("adv-volume").innerText = this.formatVolume(detailedQuote.volume);
+            document.getElementById("adv-volume-ratio").innerText = detailedQuote.volumeRatio + "x";
+            
+            const volSignal = document.getElementById("adv-volume-signal");
+            const volRatio = parseFloat(detailedQuote.volumeRatio);
+            if (volRatio > 1.5) {
+                volSignal.innerText = "放量📈";
+                volSignal.style.color = "#4caf50";
+            } else if (volRatio < 0.7) {
+                volSignal.innerText = "缩量📉";
+                volSignal.style.color = "#f44336";
+            } else {
+                volSignal.innerText = "正常";
+                volSignal.style.color = "#aaa";
+            }
+            
+            // 52 Week Position
+            document.getElementById("adv-52w-position").innerText = detailedQuote.fiftyTwoWeekPosition + "%";
+            document.getElementById("adv-52w-range").innerText = detailedQuote.fiftyTwoWeekRange;
+            
+            const pos52w = parseFloat(detailedQuote.fiftyTwoWeekPosition);
+            const signal52w = document.getElementById("adv-52w-signal");
+            if (pos52w > 80) {
+                signal52w.innerText = "高位⚠️";
+                signal52w.style.color = "#ff9800";
+            } else if (pos52w < 20) {
+                signal52w.innerText = "低位✅";
+                signal52w.style.color = "#4caf50";
+            } else {
+                signal52w.innerText = "中间";
+                signal52w.style.color = "#aaa";
+            }
+        }
+        
+        // Options Data
+        if (optionsData) {
+            document.getElementById("adv-pc-ratio").innerText = optionsData.pcRatio;
+            const pcSignal = document.getElementById("adv-pc-signal");
+            pcSignal.innerText = `(${optionsData.pcRatioSentiment})`;
+            pcSignal.style.color = optionsData.pcRatioSentiment === "看涨" ? "#4caf50" : 
+                                   optionsData.pcRatioSentiment === "看空" ? "#f44336" : "#aaa";
+            
+            document.getElementById("adv-iv").innerText = optionsData.impliedVolatility + "%";
+            const ivSignal = document.getElementById("adv-iv-signal");
+            ivSignal.innerText = `(${optionsData.ivLevel})`;
+            ivSignal.style.color = parseFloat(optionsData.impliedVolatility) > 40 ? "#ff9800" : "#aaa";
+            
+            // Update macro ribbon options section
+            const optionsEl = document.getElementById("macro-options");
+            if (optionsEl) {
+                const color = optionsData.pcRatioSentiment === "看涨" ? '#4caf50' : 
+                             optionsData.pcRatioSentiment === "看空" ? '#f44336' : '#aaa';
+                optionsEl.innerHTML = `<span style="color:${color}">🎲 P/C ${optionsData.pcRatio}</span>`;
+            }
+        }
+        
+        // Analyst Ratings
+        if (analystRatings) {
+            document.getElementById("adv-analyst").innerText = analystRatings.consensus;
+            document.getElementById("adv-analyst-count").innerText = `(${analystRatings.totalAnalysts}家)`;
+            document.getElementById("adv-target-price").innerText = `$${analystRatings.targetMean.toFixed(2)}`;
+            
+            const upside = document.getElementById("adv-upside");
+            upside.innerText = `(${analystRatings.upside}%)`;
+            upside.style.color = parseFloat(analystRatings.upside) > 0 ? "#4caf50" : "#f44336";
+        }
+        
+        // Institutional Data
+        if (institutionalData) {
+            document.getElementById("adv-institution").innerText = institutionalData.institutionOwnership;
+            const trendEl = document.getElementById("adv-institution-trend");
+            trendEl.innerText = institutionalData.institutionalTrend;
+            trendEl.style.color = institutionalData.institutionalTrend.includes("增持") ? "#4caf50" : 
+                                  institutionalData.institutionalTrend.includes("减持") ? "#f44336" : "#aaa";
+        }
+        
+        // Market Sentiment
+        if (sentiment) {
+            document.getElementById("adv-sentiment-score").innerText = sentiment.score + "/100";
+            const levelEl = document.getElementById("adv-sentiment-level");
+            levelEl.innerText = `(${sentiment.level})`;
+            const score = parseFloat(sentiment.score);
+            levelEl.style.color = score > 70 ? "#ff9800" : score < 30 ? "#4caf50" : "#aaa";
+            
+            // Update macro ribbon sentiment section
+            const sentimentEl = document.getElementById("macro-sentiment");
+            if (sentimentEl) {
+                let icon = '😐';
+                let color = '#aaa';
+                if (sentiment.level.includes("极度乐观")) { icon = '🔥'; color = '#ff9800'; }
+                else if (sentiment.level.includes("乐观")) { icon = '😊'; color = '#4caf50'; }
+                else if (sentiment.level.includes("极度悲观")) { icon = '❄️'; color = '#4fc3f7'; }
+                else if (sentiment.level.includes("悲观")) { icon = '😔'; color = '#64b5f6'; }
+                sentimentEl.innerHTML = `<span style="color:${color}">${icon} ${sentiment.score}/100</span>`;
+            }
         }
     }
 
@@ -1328,21 +1563,106 @@ class TradingAssistant {
             const ctx = this.currentMarketContext;
 
             // [FIX] Show popup immediately so user knows it is working
-            this.updateAiPopup("Initiating AI Analysis...<br/>Fetching News & Macro Data...", ctx.symbol, true);
+            this.updateAiPopup("Initiating AI Analysis...<br/>Fetching Comprehensive Market Data...", ctx.symbol, true);
             
-            // 1. Fetch News First
-            const newsHeadlines = await this.fetchMarketNews(ctx.symbol);
+            // 1. Fetch all data in parallel for maximum efficiency
+            const [newsHeadlines, detailedQuote, optionsData, analystRatings, institutionalData] = await Promise.all([
+                this.fetchMarketNews(ctx.symbol),
+                this.fetchDetailedQuote(ctx.symbol),
+                this.fetchOptionsData(ctx.symbol),
+                this.fetchAnalystRatings(ctx.symbol),
+                this.fetchInstitutionalData(ctx.symbol)
+            ]);
             const newsText = newsHeadlines.length > 0 ? newsHeadlines.join("; ") : "暂无重磅新闻";
             const portfolioText = this.getPortfolioSummary();
+            
+            // 获取板块对比数据和市场情绪
+            let sectorComparison = null;
+            let sentiment = null;
+            if (detailedQuote?.sector) {
+                sectorComparison = await this.fetchSectorComparison(detailedQuote.sector);
+            }
+            sentiment = await this.calculateMarketSentiment(ctx.symbol, detailedQuote);
+            
+            // Update UI with fetched data
+            this.updateMacroRibbon();
+            this.updateAdvancedData(detailedQuote, optionsData, analystRatings, institutionalData, sentiment);
+            
+            // 提取当前标的的持仓状态
+            let currentPositionStatus = "无持仓";
+            if (ctx.position) {
+                const { shares, avgPrice } = ctx.position;
+                const currentPrice = ctx.price;
+                const pnlPct = ((currentPrice - avgPrice) / avgPrice * 100).toFixed(2);
+                const pnlStatus = pnlPct > 0 ? "📈浮盈" : "📉浮亏";
+                currentPositionStatus = `持有 ${shares} 股，成本价 $${avgPrice}，当前 ${pnlStatus} ${Math.abs(pnlPct)}%`;
+            }
 
             // 2. Build Enhanced Prompt (Aggressive Context Injection)
+            // 构建大盘状态评估
+            let marketAssessment = "大盘数据加载中...";
+            let tradingRisk = "中等";
+            if (this.macroCache) {
+                const { spy, dji, nasdaq, vix } = this.macroCache;
+                const parts = [];
+                if (spy) parts.push(`SPY ${spy.fmt}`);
+                if (dji) parts.push(`道琼斯 ${dji.fmt}`);
+                if (nasdaq) parts.push(`纳斯达克 ${nasdaq.fmt}`);
+                marketAssessment = parts.join(" | ");
+                
+                // 评估做T风险
+                const avgChange = [spy?.changePct, dji?.changePct, nasdaq?.changePct]
+                    .filter(v => v != null)
+                    .reduce((sum, v) => sum + v, 0) / 3;
+                
+                if (avgChange < -1.5) {
+                    tradingRisk = "高风险：大盘重挫，做T容易被套，建议观望或轻仓试探";
+                } else if (avgChange < -0.5) {
+                    tradingRisk = "中高风险：大盘承压，做T需严格止损，仓位控制在30%以内";
+                } else if (avgChange > 1) {
+                    tradingRisk = "低风险：大盘强势，适合做T，可适当放大仓位";
+                } else {
+                    tradingRisk = "中等风险：大盘横盘，适合区间高抛低吸";
+                }
+            }
+            
             const prompt = `
-                身份：华尔街资深对冲基金经理 (Macro-driven Technical Trader)。
+                身份：华尔街资深对冲基金经理 (Macro-driven Technical Trader + 日内做T专家)。
                 任务：这不仅是分析，而是针对我（用户）账户的实战操作建议。
                 
+                ⚠️【当前持仓状态 - 最高优先级】⚠️
+                标的：${ctx.symbol}
+                持仓：${currentPositionStatus}
+                ${ctx.position ? `
+                ⚡ 你必须针对用户的持仓状态给出具体建议：
+                • 如果浮盈：考虑是否止盈、加仓、还是持有等待更高目标
+                • 如果浮亏：评估是否止损、补仓摊平、还是等待反弹
+                • 结合大盘环境和技术指标，给出明确的仓位管理建议` : '⚡ 用户未持仓，给出建仓时机和仓位建议'}
+                
                 【核心原则】
-                1. **必须检查用户持仓**：如果你在下方【用户持仓参考】中能找到当前标的 (${ctx.symbol})，务必根据具体盈亏给出建议（例："持有xx股浮亏，建议反弹减仓"）。不要假装我没持仓！
+                1. **持仓管理优先**：如果有持仓，必须把持仓风险管理放在第一位！
                 2. **宏观风控**：若 VIX > 25，禁止推荐激进买入。
+                3. **做T风险评估（权重20%）**：必须结合大盘状态判断做T操作的可行性和风险等级。
+                4. **技术指标验证（权重20%）**：结合RSI超买超卖、MACD金叉死叉、日内区间位置综合判断。
+                5. **量价关系分析（权重15%）**：放量突破可信，缩量上涨警惕，量价背离是反转信号。
+                6. **历史价位参考（权重10%）**：接近52周高点需谨慎，接近52周低点寻机会，Beta高需控仓。
+                7. **板块强弱对比（权重8%）**：个股强于板块优先买入，弱于板块优先减仓。
+                8. **期权市场信号（权重10%）**：P/C比率、隐含波动率、大额期权流入/流出指示专业资金动向。
+                9. **机构与内部交易（权重8%）**：机构增减持、内部人交易揭示聪明钱行为。
+                10. **分析师评级（权重5%）**：华尔街共识和目标价提供参考，但不可盲目跟从。
+                11. **市场情绪指标（权重4%）**：情绪极值往往是反转信号。
+                12. **交易时段风控**：盘前/盘后流动性差，点差大，建议降低仓位或观望；盘中交易风险相对可控。
+                
+                【大盘状态评估】（做T操作的核心参考，权重40%）
+                三大指数表现：${marketAssessment}
+                VIX恐慌指数：${this.macroCache ? this.macroCache.vix.toFixed(2) : "--"} (${this.macroCache ? this.macroCache.regime : "--"})
+                做T风险评级：${tradingRisk}
+                
+                ⚠️ 做T操作规则：
+                • 大盘跌超1.5%：高风险，不建议做T，建议观望或轻仓防守
+                • 大盘跌0.5-1.5%：中高风险，做T需谨慎，严格止损2%
+                • 大盘横盘±0.5%：中等风险，适合区间高抛低吸
+                • 大盘涨超1%：低风险，适合做T，可适当放大仓位
                 
                 【宏观环境】
                 ${this.macroCache ? this.macroCache.summary : "Pending"}
@@ -1355,7 +1675,114 @@ class TradingAssistant {
                 Price: ${ctx.price} (Change: ${ctx.change.toFixed(2)})
                 Volatility: ${ctx.volatility}
                 PnL: ${ctx.position ? ctx.pnlPercentage.toFixed(2) + "%" : "FLAT"}
+                Session: ${ctx.session} ${ctx.session === 'PRE' ? '(盘前-流动性低)' : ctx.session === 'POST' ? '(盘后-流动性低)' : ctx.session === 'CLOSED' ? '(休市)' : '(盘中交易)'}
                 Trigger: ${autoTriggerReason || "Manual Check"}
+                
+                【技术指标】(关键做T参考)
+                RSI(14): ${document.getElementById("assist-rsi")?.innerText || "计算中"} ${document.getElementById("assist-rsi-signal")?.innerText ? `(${document.getElementById("assist-rsi-signal").innerText})` : ''}
+                MACD: ${document.getElementById("assist-macd")?.innerText || "计算中"} ${document.getElementById("assist-macd-signal")?.innerText ? `(${document.getElementById("assist-macd-signal").innerText})` : ''}
+                ATR(14): ${document.getElementById("assist-atr")?.innerText || "计算中"}
+                动态止损位: $${document.getElementById("assist-stop")?.innerText || "计算中"}
+                
+                【日内做T分析】(核心决策依据)
+                日内区间: ${document.getElementById("assist-intraday-range")?.innerText || "监控中"}
+                当前位置: ${document.getElementById("assist-range-position")?.innerText || "--"} ${document.getElementById("assist-range-signal")?.innerText ? `(${document.getElementById("assist-range-signal").innerText})` : ''}
+                做T建议: ${document.getElementById("assist-dayt-signal")?.innerText || "⏳监控中"}
+                
+                ⚡ 做T操作关键提示：
+                • RSI<30且日内低位 → 强烈低吸信号
+                • RSI>70且日内高位 → 强烈高抛信号
+                • MACD金叉+低位 → 可建仓或加仓
+                • MACD死叉+高位 → 应减仓或止盈
+                • ATR过大(>3.0) → 波动剧烈，控制仓位
+                
+                ${detailedQuote ? `【成交量分析】(资金流向判断)
+                当前成交量: ${this.formatVolume(detailedQuote.volume)}
+                日均成交量: ${this.formatVolume(detailedQuote.avgVolume)}
+                量比: ${detailedQuote.volumeRatio}x ${parseFloat(detailedQuote.volumeRatio) > 1.5 ? '(放量📈)' : parseFloat(detailedQuote.volumeRatio) < 0.7 ? '(缩量📉)' : '(正常)'}
+                
+                ⚡ 量价关系提示：
+                • 放量上涨(量比>1.5且价涨) → 资金流入，趋势强劲
+                • 放量下跌(量比>1.5且价跌) → 恐慌性抛售，警惕
+                • 缩量上涨(量比<0.7且价涨) → 上涨乏力，可能回调
+                • 缩量下跌(量比<0.7且价跌) → 下跌动能弱，可能见底
+                
+                【历史关键价位】(支撑阻力参考)
+                52周区间: ${detailedQuote.fiftyTwoWeekRange}
+                当前位置: ${detailedQuote.fiftyTwoWeekPosition}% ${parseFloat(detailedQuote.fiftyTwoWeekPosition) > 80 ? '(接近年度高位⚠️)' : parseFloat(detailedQuote.fiftyTwoWeekPosition) < 20 ? '(接近年度低位✅)' : '(中间区域)'}
+                52周高点: $${detailedQuote.fiftyTwoWeekHigh.toFixed(2)} (强阻力位)
+                52周低点: $${detailedQuote.fiftyTwoWeekLow.toFixed(2)} (强支撑位)
+                
+                ⚡ 历史价位提示：
+                • 当前价接近52周高点(>90%) → 突破需放量确认，否则高位回调风险大
+                • 当前价接近52周低点(<10%) → 超跌反弹机会，但需确认止跌信号
+                • Beta系数: ${detailedQuote.beta.toFixed(2)} ${detailedQuote.beta > 1.2 ? '(高波动)' : detailedQuote.beta < 0.8 ? '(低波动)' : '(正常)'}
+                
+                【行业板块对比】(相对强弱判断)
+                所属行业: ${detailedQuote.industry}
+                所属板块: ${detailedQuote.sector}
+                ${sectorComparison ? `板块ETF表现: ${sectorComparison.fmt}
+                相对强度: ${ctx.change > 0 && sectorComparison.changePct > 0 ? '与板块同涨📈' : ctx.change < 0 && sectorComparison.changePct < 0 ? '与板块同跌📉' : ctx.change > 0 && sectorComparison.changePct < 0 ? '逆势上涨💪(强于板块)' : '逆势下跌⚠️(弱于板块)'}` : '板块数据获取中...'}
+                
+                ⚡ 板块轮动提示：
+                • 个股强于板块 → 相对强势，可重点关注
+                • 个股弱于板块 → 相对疲弱，规避或减仓
+                • 板块整体走强 → 行业景气度上升，可增加配置
+                • 板块整体走弱 → 行业面临压力，降低配置
+                ` : ''}
+                
+                ${optionsData ? `【期权市场信号】(专业资金动向)
+                看涨/看跌比率: ${optionsData.pcRatio} (${optionsData.pcRatioSentiment})
+                隐含波动率: ${optionsData.impliedVolatility}% (${optionsData.ivLevel})
+                期权流入: ${optionsData.optionFlow}
+                看涨成交量: ${optionsData.callVolume} | 看跌成交量: ${optionsData.putVolume}
+                最近到期: ${optionsData.expirationDate}
+                
+                ⚡ 期权信号解读：
+                • P/C比率>1.2 → 市场偏空，看跌期权需求大，警惕下跌
+                • P/C比率<0.8 → 市场偏多，看涨期权需求大，谨防过热
+                • IV>40% → 市场预期大波动，可能有重大事件
+                • 大额看涨流入 → 机构做多，可跟随
+                • 大额看跌保护 → 机构对冲风险，需谨慎
+                ` : ''}
+                
+                ${analystRatings ? `【分析师评级】(华尔街共识)
+                总分析师数: ${analystRatings.totalAnalysts}家
+                评级分布: 强烈买入${analystRatings.strongBuy} | 买入${analystRatings.buy} | 持有${analystRatings.hold} | 卖出${analystRatings.sell} | 强烈卖出${analystRatings.strongSell}
+                综合评级: ${analystRatings.consensus}
+                目标价区间: $${analystRatings.targetLow.toFixed(2)} - $${analystRatings.targetHigh.toFixed(2)} (均值$${analystRatings.targetMean.toFixed(2)})
+                上行空间: ${analystRatings.upside}%
+                
+                ⚡ 分析师共识提示：
+                • 强烈买入>10家 且 上行空间>20% → 华尔街看好，可重点关注
+                • 评级下调趋势 或 目标价调低 → 基本面转弱，需警惕
+                • 上行空间<5% → 估值合理偏贵，性价比不高
+                • 上行空间>30% → 可能被低估，但需确认催化剂
+                ` : ''}
+                
+                ${institutionalData ? `【机构与内部交易】(聪明钱动向)
+                机构持股比例: ${institutionalData.institutionOwnership}
+                内部人持股: ${institutionalData.insiderOwnership}
+                机构动向: ${institutionalData.institutionalTrend} (平均变化${institutionalData.avgInstitutionalChange})
+                内部交易: ${institutionalData.insiderSentiment}
+                
+                ⚡ 机构动向提示：
+                • 机构连续增持(>5%) → 长线资金看好，可增加配置
+                • 机构连续减持(<-5%) → 机构撤离，需谨慎
+                • 内部人大额买入 → 管理层对公司有信心
+                • 内部人集中卖出 → 可能知道不利消息，警惕
+                ` : ''}
+                
+                ${sentiment ? `【市场情绪指标】(综合情绪评分)
+                情绪分数: ${sentiment.score}/100 (${sentiment.level})
+                情绪因子: ${sentiment.factors.join(' | ')}
+                建议: ${sentiment.recommendation}
+                
+                ⚡ 情绪极值提示：
+                • 情绪>70 → 市场过于乐观，可能见顶，控制仓位
+                • 情绪<30 → 市场过于悲观，可能见底，寻找机会
+                • 情绪快速反转 → 趋势可能改变，密切关注
+                ` : ''}
                 
                 【新闻】
                 ${newsText}
@@ -1366,9 +1793,10 @@ class TradingAssistant {
                     "action": "BUY" | "SELL" | "HOLD",
                     "confidence": 0.0-1.0 (置信度),
                     "quantity_pct": 0-100 (建议仓位比例),
-                    "support": 关键支撑位数字(无则0),
-                    "resistance": 关键阻力位数字(无则0),
-                    "analysis": "100字以内的犀利操作建议，包含止损提示。"
+                    "support": 关键支撑位数字(优先考虑52周低点和日内低点),
+                    "resistance": 关键阻力位数字(优先考虑52周高点和日内高点),
+                    "position_advice": "针对当前持仓的具体操作建议(如有持仓必填)，必须综合考虑：①量价分析 ②历史位置 ③板块对比 ④期权信号 ⑤机构动向 ⑥分析师评级 ⑦市场情绪，例如：'持仓浮亏8%，当前：放量下跌+接近52周低点$230+弱于板块+期权P/C比1.5看空+机构减持2%+分析师目标价$240(+4%)+情绪悲观25分，综合建议：反弹至$235减半仓，跌破$225全部止损'",
+                    "analysis": "120字以内的总体分析，必须综合：大盘环境20% + 技术面20% + 量价15% + 历史位置10% + 板块8% + 期权10% + 机构8% + 分析师5% + 情绪4%，给出立体化风控决策"
                 }
             `;
 
@@ -1694,6 +2122,7 @@ class TradingAssistant {
             let commentaryHTML = "";
             let supSum = 0, resSum = 0;
             let supCount = 0, resCount = 0;
+            let positionAdviceHTML = "";
 
             // Action Aggregation
             const voteMap = { "BUY": 0, "SELL": 0, "HOLD": 0 };
@@ -1712,6 +2141,16 @@ class TradingAssistant {
                     else voteMap["HOLD"]++; // Default fallback
 
                     count++;
+                    
+                    // 收集持仓建议（只取第一个有效的）
+                    if (json.position_advice && !positionAdviceHTML) {
+                        positionAdviceHTML = `
+                            <div style="background:#1a237e; border:2px solid #3949ab; padding:8px; margin-bottom:12px; border-radius:4px;">
+                                <div style="font-size:11px; color:#90caf9; margin-bottom:4px;">💼 持仓建议</div>
+                                <div style="font-size:12px; color:#fff; line-height:1.4;">${json.position_advice}</div>
+                            </div>
+                        `;
+                    }
                     
                     commentaryHTML += `
                         <div style="margin-bottom:8px; border-left:2px solid ${r.color}; padding-left:6px;">
@@ -1773,10 +2212,12 @@ class TradingAssistant {
                     <strong>综合评级 ${avgSent}/10</strong>
                     <strong style="color:${actionColor}; border:1px solid ${actionColor}; padding:0 4px; border-radius:3px;">${winner}</strong>
                 </div>
+                ${ctx.position ? `<div style="font-size:10px; color:#90caf9; margin-top:4px;">💼 ${currentPositionStatus}</div>` : ''}
             `;
             
-            // Show detailed popup
-            this.updateAiPopup(commentaryHTML, `${ctx.symbol} AI Analysis`, false);
+            // Show detailed popup with position advice at top
+            const finalHTML = positionAdviceHTML + commentaryHTML;
+            this.updateAiPopup(finalHTML, `${ctx.symbol} AI Analysis`, false);
 
             // AUTO-TRADE TRIGGER (Experimental)
             if (this.settings.autoTradeEnabled) {
@@ -2143,16 +2584,386 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
     }
 
+    // 获取详细市场数据（成交量、52周高低、行业板块等）
+    async fetchDetailedQuote(symbol) {
+        // 使用缓存避免频繁请求
+        const cacheKey = `detailed_${symbol}`;
+        const cached = this.detailedQuoteCache?.[cacheKey];
+        if (cached && Date.now() - cached.ts < 300000) { // 5分钟缓存
+            return cached.data;
+        }
+
+        try {
+            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`);
+            const data = JSON.parse(rawText);
+            const quote = data.quoteResponse?.result?.[0];
+            if (!quote) return null;
+
+            const result = {
+                // 成交量数据
+                volume: quote.regularMarketVolume || 0,
+                avgVolume: quote.averageVolume || quote.averageDailyVolume10Day || 0,
+                volumeRatio: quote.regularMarketVolume && quote.averageVolume 
+                    ? (quote.regularMarketVolume / quote.averageVolume).toFixed(2) 
+                    : "1.00",
+                
+                // 52周高低点
+                fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || 0,
+                fiftyTwoWeekLow: quote.fiftyTwoWeekLow || 0,
+                fiftyTwoWeekRange: quote.fiftyTwoWeekHigh && quote.fiftyTwoWeekLow
+                    ? `$${quote.fiftyTwoWeekLow.toFixed(2)} - $${quote.fiftyTwoWeekHigh.toFixed(2)}`
+                    : "N/A",
+                
+                // 当前价格在52周区间的位置
+                fiftyTwoWeekPosition: quote.regularMarketPrice && quote.fiftyTwoWeekHigh && quote.fiftyTwoWeekLow
+                    ? (((quote.regularMarketPrice - quote.fiftyTwoWeekLow) / (quote.fiftyTwoWeekHigh - quote.fiftyTwoWeekLow)) * 100).toFixed(1)
+                    : "N/A",
+                
+                // 行业板块
+                sector: quote.sector || "N/A",
+                industry: quote.industry || "N/A",
+                
+                // 市值
+                marketCap: quote.marketCap || 0,
+                marketCapFmt: this.formatMarketCap(quote.marketCap),
+                
+                // PE 估值
+                trailingPE: quote.trailingPE || 0,
+                forwardPE: quote.forwardPE || 0,
+                
+                // Beta（相对大盘波动性）
+                beta: quote.beta || 1.0
+            };
+
+            // 缓存结果
+            if (!this.detailedQuoteCache) this.detailedQuoteCache = {};
+            this.detailedQuoteCache[cacheKey] = { data: result, ts: Date.now() };
+
+            return result;
+        } catch (e) {
+            console.warn(`Failed to fetch detailed quote for ${symbol}`, e);
+            return null;
+        }
+    }
+
+    // 格式化市值显示
+    formatMarketCap(cap) {
+        if (!cap) return "N/A";
+        if (cap >= 1e12) return `$${(cap / 1e12).toFixed(2)}T`;
+        if (cap >= 1e9) return `$${(cap / 1e9).toFixed(2)}B`;
+        if (cap >= 1e6) return `$${(cap / 1e6).toFixed(2)}M`;
+        return `$${cap.toFixed(0)}`;
+    }
+
+    // 格式化成交量显示
+    formatVolume(vol) {
+        if (!vol) return "N/A";
+        if (vol >= 1e9) return `${(vol / 1e9).toFixed(2)}B`;
+        if (vol >= 1e6) return `${(vol / 1e6).toFixed(2)}M`;
+        if (vol >= 1e3) return `${(vol / 1e3).toFixed(2)}K`;
+        return vol.toString();
+    }
+
+    // 获取板块ETF数据用于对比
+    async fetchSectorComparison(sector) {
+        // 板块ETF映射
+        const sectorETFs = {
+            "Technology": "XLK",
+            "Financial Services": "XLF",
+            "Healthcare": "XLV",
+            "Consumer Cyclical": "XLY",
+            "Consumer Defensive": "XLP",
+            "Energy": "XLE",
+            "Industrials": "XLI",
+            "Materials": "XLB",
+            "Real Estate": "XLRE",
+            "Utilities": "XLU",
+            "Communication Services": "XLC"
+        };
+
+        const etf = sectorETFs[sector];
+        if (!etf) return null;
+
+        return await this.fetchTickerData(etf);
+    }
+
+    // ========== Priority 3: 高级数据获取 ==========
+
+    // 1. 期权市场数据（看涨看跌比率、隐含波动率）
+    async fetchOptionsData(symbol) {
+        const cacheKey = `options_${symbol}`;
+        const cached = this.optionsCache?.[cacheKey];
+        if (cached && Date.now() - cached.ts < 600000) { // 10分钟缓存
+            return cached.data;
+        }
+
+        try {
+            // Yahoo Finance Options API
+            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v7/finance/options/${symbol}`);
+            const data = JSON.parse(rawText);
+            const optionChain = data.optionChain?.result?.[0];
+            if (!optionChain) return null;
+
+            const quote = optionChain.quote;
+            const options = optionChain.options?.[0]; // 最近到期的期权
+
+            // 计算看涨看跌比率
+            const calls = options?.calls || [];
+            const puts = options?.puts || [];
+            
+            const callVolume = calls.reduce((sum, c) => sum + (c.volume || 0), 0);
+            const putVolume = puts.reduce((sum, p) => sum + (p.volume || 0), 0);
+            const pcRatio = putVolume > 0 ? (callVolume / putVolume).toFixed(2) : "N/A";
+            
+            // 计算隐含波动率（IV）
+            const callIVs = calls.filter(c => c.impliedVolatility).map(c => c.impliedVolatility);
+            const putIVs = puts.filter(p => p.impliedVolatility).map(p => p.impliedVolatility);
+            const avgIV = [...callIVs, ...putIVs].length > 0
+                ? ([...callIVs, ...putIVs].reduce((a, b) => a + b, 0) / [...callIVs, ...putIVs].length * 100).toFixed(1)
+                : "N/A";
+
+            // 期权流入分析（大额交易）
+            const bigCalls = calls.filter(c => (c.volume || 0) > 1000).length;
+            const bigPuts = puts.filter(p => (p.volume || 0) > 1000).length;
+            
+            let optionFlow = "中性";
+            if (bigCalls > bigPuts * 1.5) optionFlow = "大额看涨流入";
+            else if (bigPuts > bigCalls * 1.5) optionFlow = "大额看跌保护";
+
+            const result = {
+                pcRatio,  // Put/Call Ratio
+                pcRatioSentiment: parseFloat(pcRatio) > 1.2 ? "看空" : parseFloat(pcRatio) < 0.8 ? "看涨" : "中性",
+                impliedVolatility: avgIV,
+                ivLevel: parseFloat(avgIV) > 40 ? "高波动预期" : parseFloat(avgIV) < 20 ? "低波动预期" : "正常",
+                optionFlow,
+                expirationDate: options?.expirationDate ? new Date(options.expirationDate * 1000).toLocaleDateString() : "N/A",
+                callVolume: this.formatVolume(callVolume),
+                putVolume: this.formatVolume(putVolume)
+            };
+
+            if (!this.optionsCache) this.optionsCache = {};
+            this.optionsCache[cacheKey] = { data: result, ts: Date.now() };
+
+            return result;
+        } catch (e) {
+            console.warn(`Failed to fetch options data for ${symbol}`, e);
+            return null;
+        }
+    }
+
+    // 2. 分析师评级和目标价
+    async fetchAnalystRatings(symbol) {
+        const cacheKey = `analyst_${symbol}`;
+        const cached = this.analystCache?.[cacheKey];
+        if (cached && Date.now() - cached.ts < 86400000) { // 24小时缓存
+            return cached.data;
+        }
+
+        try {
+            // Yahoo Finance Recommendations API
+            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=recommendationTrend,financialData`);
+            const data = JSON.parse(rawText);
+            const summary = data.quoteSummary?.result?.[0];
+            if (!summary) return null;
+
+            const trend = summary.recommendationTrend?.trend?.[0]; // 最近一个月
+            const financial = summary.financialData;
+
+            const result = {
+                // 评级分布
+                strongBuy: trend?.strongBuy || 0,
+                buy: trend?.buy || 0,
+                hold: trend?.hold || 0,
+                sell: trend?.sell || 0,
+                strongSell: trend?.strongSell || 0,
+                
+                // 综合评级
+                totalAnalysts: (trend?.strongBuy || 0) + (trend?.buy || 0) + (trend?.hold || 0) + (trend?.sell || 0) + (trend?.strongSell || 0),
+                
+                // 目标价
+                targetLow: financial?.targetLowPrice?.raw || 0,
+                targetHigh: financial?.targetHighPrice?.raw || 0,
+                targetMean: financial?.targetMeanPrice?.raw || 0,
+                targetMedian: financial?.targetMedianPrice?.raw || 0,
+                
+                // 当前价
+                currentPrice: financial?.currentPrice?.raw || 0
+            };
+
+            // 计算上行/下行空间
+            if (result.targetMean && result.currentPrice) {
+                result.upside = (((result.targetMean - result.currentPrice) / result.currentPrice) * 100).toFixed(1);
+            } else {
+                result.upside = "N/A";
+            }
+
+            // 综合评级倾向
+            const bullish = (result.strongBuy * 2 + result.buy);
+            const bearish = (result.strongSell * 2 + result.sell);
+            if (bullish > bearish * 1.5) result.consensus = "强烈买入";
+            else if (bullish > bearish) result.consensus = "买入";
+            else if (bearish > bullish * 1.5) result.consensus = "卖出";
+            else if (bearish > bullish) result.consensus = "减持";
+            else result.consensus = "持有";
+
+            if (!this.analystCache) this.analystCache = {};
+            this.analystCache[cacheKey] = { data: result, ts: Date.now() };
+
+            return result;
+        } catch (e) {
+            console.warn(`Failed to fetch analyst ratings for ${symbol}`, e);
+            return null;
+        }
+    }
+
+    // 3. 机构持股和内部交易
+    async fetchInstitutionalData(symbol) {
+        const cacheKey = `institutional_${symbol}`;
+        const cached = this.institutionalCache?.[cacheKey];
+        if (cached && Date.now() - cached.ts < 86400000) { // 24小时缓存
+            return cached.data;
+        }
+
+        try {
+            // Yahoo Finance Institution Ownership API
+            const rawText = await this.proxyFetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=institutionOwnership,insiderHolders,majorHoldersBreakdown`);
+            const data = JSON.parse(rawText);
+            const summary = data.quoteSummary?.result?.[0];
+            if (!summary) return null;
+
+            const institutions = summary.institutionOwnership?.ownershipList || [];
+            const insiders = summary.insiderHolders?.holders || [];
+            const breakdown = summary.majorHoldersBreakdown;
+
+            // 计算机构持股变化
+            const recentChanges = institutions.slice(0, 5).map(inst => ({
+                name: inst.organization || "Unknown",
+                shares: this.formatVolume(inst.position?.raw || 0),
+                change: inst.pctChange?.raw || 0
+            }));
+
+            const avgChange = recentChanges.length > 0
+                ? (recentChanges.reduce((sum, i) => sum + i.change, 0) / recentChanges.length).toFixed(2)
+                : 0;
+
+            // 内部交易趋势
+            const recentInsiders = insiders.slice(0, 3).map(insider => ({
+                name: insider.name || "Unknown",
+                position: insider.relation || "N/A",
+                transaction: insider.transactionDescription || "N/A",
+                shares: this.formatVolume(insider.positionDirect?.raw || 0)
+            }));
+
+            const result = {
+                // 机构持股比例
+                institutionOwnership: breakdown?.institutionsPercentHeld?.fmt || "N/A",
+                insiderOwnership: breakdown?.insidersPercentHeld?.fmt || "N/A",
+                
+                // 机构动向
+                institutionalTrend: avgChange > 2 ? "增持📈" : avgChange < -2 ? "减持📉" : "稳定",
+                avgInstitutionalChange: avgChange + "%",
+                topHolders: recentChanges.slice(0, 3),
+                
+                // 内部交易
+                recentInsiderTransactions: recentInsiders,
+                insiderSentiment: recentInsiders.some(t => t.transaction.toLowerCase().includes('buy')) ? "内部增持" : 
+                                  recentInsiders.some(t => t.transaction.toLowerCase().includes('sell')) ? "内部减持" : "无明显信号"
+            };
+
+            if (!this.institutionalCache) this.institutionalCache = {};
+            this.institutionalCache[cacheKey] = { data: result, ts: Date.now() };
+
+            return result;
+        } catch (e) {
+            console.warn(`Failed to fetch institutional data for ${symbol}`, e);
+            return null;
+        }
+    }
+
+    // 4. 市场情绪指标（简化版 - 基于技术指标综合）
+    async calculateMarketSentiment(symbol, detailedQuote) {
+        try {
+            // 综合多个维度计算情绪分数（0-100）
+            let sentimentScore = 50; // 中性起点
+            const factors = [];
+
+            // 1. RSI因子（20分）
+            const rsiText = document.getElementById("assist-rsi")?.innerText || "";
+            const rsiMatch = rsiText.match(/(\d+\.?\d*)/);
+            if (rsiMatch) {
+                const rsi = parseFloat(rsiMatch[1]);
+                if (rsi > 70) { sentimentScore -= 10; factors.push("RSI超买-10"); }
+                else if (rsi < 30) { sentimentScore += 10; factors.push("RSI超卖+10"); }
+                else { sentimentScore += (50 - rsi) / 5; factors.push(`RSI中性${((50 - rsi) / 5).toFixed(1)}`); }
+            }
+
+            // 2. MACD因子（15分）
+            const macdSignal = document.getElementById("assist-macd-signal")?.innerText || "";
+            if (macdSignal.includes("金叉")) { sentimentScore += 10; factors.push("MACD金叉+10"); }
+            else if (macdSignal.includes("死叉")) { sentimentScore -= 10; factors.push("MACD死叉-10"); }
+            else if (macdSignal.includes("多头")) { sentimentScore += 5; factors.push("MACD多头+5"); }
+            else if (macdSignal.includes("空头")) { sentimentScore -= 5; factors.push("MACD空头-5"); }
+
+            // 3. 量价因子（15分）
+            if (detailedQuote) {
+                const volRatio = parseFloat(detailedQuote.volumeRatio);
+                const priceChange = this.state.lastPrice - this.state.history[this.state.history.length - 2] || 0;
+                
+                if (volRatio > 1.5 && priceChange > 0) { sentimentScore += 10; factors.push("放量上涨+10"); }
+                else if (volRatio > 1.5 && priceChange < 0) { sentimentScore -= 10; factors.push("放量下跌-10"); }
+                else if (volRatio < 0.7 && priceChange > 0) { sentimentScore -= 5; factors.push("缩量上涨-5"); }
+            }
+
+            // 4. 52周位置因子（10分）
+            if (detailedQuote?.fiftyTwoWeekPosition !== "N/A") {
+                const pos = parseFloat(detailedQuote.fiftyTwoWeekPosition);
+                if (pos > 80) { sentimentScore -= 8; factors.push("年度高位-8"); }
+                else if (pos < 20) { sentimentScore += 8; factors.push("年度低位+8"); }
+            }
+
+            // 5. 板块强弱因子（10分）
+            const rangeSignal = document.getElementById("assist-range-signal")?.innerText || "";
+            if (rangeSignal.includes("低位")) { sentimentScore += 8; factors.push("日内低位+8"); }
+            else if (rangeSignal.includes("高位")) { sentimentScore -= 8; factors.push("日内高位-8"); }
+
+            // 限制范围 0-100
+            sentimentScore = Math.max(0, Math.min(100, sentimentScore));
+
+            // 分级
+            let level = "中性";
+            if (sentimentScore >= 70) level = "极度乐观🔥";
+            else if (sentimentScore >= 60) level = "乐观📈";
+            else if (sentimentScore <= 30) level = "极度悲观❄️";
+            else if (sentimentScore <= 40) level = "悲观📉";
+
+            return {
+                score: sentimentScore.toFixed(0),
+                level,
+                factors: factors.slice(0, 5), // 最多显示5个因子
+                recommendation: sentimentScore > 60 ? "情绪偏热，注意回调风险" : 
+                               sentimentScore < 40 ? "情绪偏冷，可能存在反弹机会" : 
+                               "情绪中性，观察市场方向"
+            };
+        } catch (e) {
+            console.warn(`Failed to calculate market sentiment for ${symbol}`, e);
+            return null;
+        }
+    }
+
+    // ========== End Priority 3 ==========
+
     async fetchMacroData() {
         if (this.macroCache && (Date.now() - this.macroCache.ts < 300000)) return; 
         
         try {
             // Try primary providers, but prefer external professional sources when available
-            const [spy, xlk, xlf, iwm] = await Promise.all([
+            const [spy, xlk, xlf, iwm, dji, nasdaq] = await Promise.all([
                 this.fetchTickerData("SPY"),
                 this.fetchTickerData("XLK"),
                 this.fetchTickerData("XLF"),
-                this.fetchTickerData("IWM")
+                this.fetchTickerData("IWM"),
+                this.fetchTickerData("^DJI"),    // 道琼斯工业指数
+                this.fetchTickerData("^IXIC")   // 纳斯达克综合指数
             ]);
 
             // For VIX and TNX try external providers first (CBOE / TradingView via proxyFetch)
@@ -2176,6 +2987,10 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 summary,
                 vix: vixVal,
                 regime,
+                spy,
+                dji,
+                nasdaq,
+                xlk,
                 ts: Date.now() 
             };
             
