@@ -2,13 +2,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Standard GET fetch for Yahoo Finance
     if (request.action === "FETCH_DATA") {
         fetch(request.url, { 
-            credentials: 'omit', 
+            credentials: 'include',  // 允许发送cookies
             cache: 'no-store',
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
+                'Accept': '*/*',
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Referer': 'https://finance.yahoo.com/'
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Origin': 'https://finance.yahoo.com',
+                'Referer': 'https://finance.yahoo.com/',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-site'
             }
         })
             .then(response => {
