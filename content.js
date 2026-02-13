@@ -327,7 +327,10 @@ class TradingAssistant {
                 <div class="advanced-data-section" style="margin-top:8px; border-top:1px dashed #333; padding-top:5px;">
                     <div class="data-row" style="cursor:pointer;" id="advanced-data-toggle">
                         <span class="label" style="font-weight:bold; color:#64b5f6;">📊 高级数据</span>
-                        <span class="value" style="font-size:10px; color:#888;" id="advanced-toggle-icon">▶ 点击展开</span>
+                        <div style="display:flex; align-items:center; gap:5px;">
+                            <button id="btn-refresh-advanced" style="font-size:9px; background:#007acc; color:white; border:none; padding:1px 4px; cursor:pointer; border-radius:2px;" title="立即刷新">🔄</button>
+                            <span class="value" style="font-size:10px; color:#888;" id="advanced-toggle-icon">▶ 点击展开</span>
+                        </div>
                     </div>
                     <div id="advanced-data-content" style="display:none; margin-top:5px;">
                         <!-- Volume Analysis -->
@@ -607,6 +610,12 @@ class TradingAssistant {
         // Advanced Data Toggle
         document.getElementById("advanced-data-toggle").onclick = () => this.toggleAdvancedData();
         
+        // Advanced Data Refresh Button (prevent event bubbling)
+        document.getElementById("btn-refresh-advanced").onclick = (e) => {
+            e.stopPropagation(); // 防止触发toggle
+            this.updateAdvancedDataPeriodically();
+        };
+        
         // Side Watchlist Toggle
         document.getElementById("toggle-side-wl").onclick = () => this.toggleSideWatchlist();
         
@@ -766,54 +775,81 @@ class TradingAssistant {
 
     // Update advanced data section
     updateAdvancedData(detailedQuote, optionsData, analystRatings, institutionalData, sentiment) {
+        console.log("🖼️ 更新高级数据UI", {
+            detailedQuote: !!detailedQuote,
+            optionsData: !!optionsData,
+            analystRatings: !!analystRatings,
+            institutionalData: !!institutionalData,
+            sentiment: !!sentiment
+        });
+        
         // Volume Analysis
         if (detailedQuote) {
-            document.getElementById("adv-volume").innerText = this.formatVolume(detailedQuote.volume);
-            document.getElementById("adv-volume-ratio").innerText = detailedQuote.volumeRatio + "x";
-            
+            const volEl = document.getElementById("adv-volume");
+            const volRatioEl = document.getElementById("adv-volume-ratio");
             const volSignal = document.getElementById("adv-volume-signal");
-            const volRatio = parseFloat(detailedQuote.volumeRatio);
-            if (volRatio > 1.5) {
-                volSignal.innerText = "放量📈";
-                volSignal.style.color = "#4caf50";
-            } else if (volRatio < 0.7) {
-                volSignal.innerText = "缩量📉";
-                volSignal.style.color = "#f44336";
-            } else {
-                volSignal.innerText = "正常";
-                volSignal.style.color = "#aaa";
+            
+            if (volEl) volEl.innerText = this.formatVolume(detailedQuote.volume);
+            if (volRatioEl) volRatioEl.innerText = detailedQuote.volumeRatio + "x";
+            
+            if (volSignal) {
+                const volRatio = parseFloat(detailedQuote.volumeRatio);
+                if (volRatio > 1.5) {
+                    volSignal.innerText = "放量📈";
+                    volSignal.style.color = "#4caf50";
+                } else if (volRatio < 0.7) {
+                    volSignal.innerText = "缩量📉";
+                    volSignal.style.color = "#f44336";
+                } else {
+                    volSignal.innerText = "正常";
+                    volSignal.style.color = "#aaa";
+                }
             }
             
             // 52 Week Position
-            document.getElementById("adv-52w-position").innerText = detailedQuote.fiftyTwoWeekPosition + "%";
-            document.getElementById("adv-52w-range").innerText = detailedQuote.fiftyTwoWeekRange;
-            
-            const pos52w = parseFloat(detailedQuote.fiftyTwoWeekPosition);
+            const pos52wEl = document.getElementById("adv-52w-position");
+            const range52wEl = document.getElementById("adv-52w-range");
             const signal52w = document.getElementById("adv-52w-signal");
-            if (pos52w > 80) {
-                signal52w.innerText = "高位⚠️";
-                signal52w.style.color = "#ff9800";
-            } else if (pos52w < 20) {
-                signal52w.innerText = "低位✅";
-                signal52w.style.color = "#4caf50";
-            } else {
-                signal52w.innerText = "中间";
-                signal52w.style.color = "#aaa";
+            
+            if (pos52wEl) pos52wEl.innerText = detailedQuote.fiftyTwoWeekPosition + "%";
+            if (range52wEl) range52wEl.innerText = detailedQuote.fiftyTwoWeekRange;
+            
+            if (signal52w) {
+                const pos52w = parseFloat(detailedQuote.fiftyTwoWeekPosition);
+                if (pos52w > 80) {
+                    signal52w.innerText = "高位⚠️";
+                    signal52w.style.color = "#ff9800";
+                } else if (pos52w < 20) {
+                    signal52w.innerText = "低位✅";
+                    signal52w.style.color = "#4caf50";
+                } else {
+                    signal52w.innerText = "中间";
+                    signal52w.style.color = "#aaa";
+                }
             }
+        } else {
+            console.warn("⚠️ detailedQuote为空，跳过成交量和52周数据更新");
         }
         
         // Options Data
         if (optionsData) {
-            document.getElementById("adv-pc-ratio").innerText = optionsData.pcRatio;
+            const pcRatioEl = document.getElementById("adv-pc-ratio");
             const pcSignal = document.getElementById("adv-pc-signal");
-            pcSignal.innerText = `(${optionsData.pcRatioSentiment})`;
-            pcSignal.style.color = optionsData.pcRatioSentiment === "看涨" ? "#4caf50" : 
-                                   optionsData.pcRatioSentiment === "看空" ? "#f44336" : "#aaa";
-            
-            document.getElementById("adv-iv").innerText = optionsData.impliedVolatility + "%";
+            const ivEl = document.getElementById("adv-iv");
             const ivSignal = document.getElementById("adv-iv-signal");
-            ivSignal.innerText = `(${optionsData.ivLevel})`;
-            ivSignal.style.color = parseFloat(optionsData.impliedVolatility) > 40 ? "#ff9800" : "#aaa";
+            
+            if (pcRatioEl) pcRatioEl.innerText = optionsData.pcRatio;
+            if (pcSignal) {
+                pcSignal.innerText = `(${optionsData.pcRatioSentiment})`;
+                pcSignal.style.color = optionsData.pcRatioSentiment === "看涨" ? "#4caf50" : 
+                                       optionsData.pcRatioSentiment === "看空" ? "#f44336" : "#aaa";
+            }
+            
+            if (ivEl) ivEl.innerText = optionsData.impliedVolatility + "%";
+            if (ivSignal) {
+                ivSignal.innerText = `(${optionsData.ivLevel})`;
+                ivSignal.style.color = parseFloat(optionsData.impliedVolatility) > 40 ? "#ff9800" : "#aaa";
+            }
             
             // Update macro ribbon options section
             const optionsEl = document.getElementById("macro-options");
@@ -822,35 +858,55 @@ class TradingAssistant {
                              optionsData.pcRatioSentiment === "看空" ? '#f44336' : '#aaa';
                 optionsEl.innerHTML = `<span style="color:${color}">🎲 P/C ${optionsData.pcRatio}</span>`;
             }
+        } else {
+            console.warn("⚠️ optionsData为空，跳过期权数据更新");
         }
         
         // Analyst Ratings
         if (analystRatings) {
-            document.getElementById("adv-analyst").innerText = analystRatings.consensus;
-            document.getElementById("adv-analyst-count").innerText = `(${analystRatings.totalAnalysts}家)`;
-            document.getElementById("adv-target-price").innerText = `$${analystRatings.targetMean.toFixed(2)}`;
+            const analystEl = document.getElementById("adv-analyst");
+            const analystCountEl = document.getElementById("adv-analyst-count");
+            const targetPriceEl = document.getElementById("adv-target-price");
+            const upsideEl = document.getElementById("adv-upside");
             
-            const upside = document.getElementById("adv-upside");
-            upside.innerText = `(${analystRatings.upside}%)`;
-            upside.style.color = parseFloat(analystRatings.upside) > 0 ? "#4caf50" : "#f44336";
+            if (analystEl) analystEl.innerText = analystRatings.consensus;
+            if (analystCountEl) analystCountEl.innerText = `(${analystRatings.totalAnalysts}家)`;
+            if (targetPriceEl) targetPriceEl.innerText = `$${analystRatings.targetMean.toFixed(2)}`;
+            
+            if (upsideEl) {
+                upsideEl.innerText = `(${analystRatings.upside}%)`;
+                upsideEl.style.color = parseFloat(analystRatings.upside) > 0 ? "#4caf50" : "#f44336";
+            }
+        } else {
+            console.warn("⚠️ analystRatings为空，跳过分析师评级更新");
         }
         
         // Institutional Data
         if (institutionalData) {
-            document.getElementById("adv-institution").innerText = institutionalData.institutionOwnership;
+            const institutionEl = document.getElementById("adv-institution");
             const trendEl = document.getElementById("adv-institution-trend");
-            trendEl.innerText = institutionalData.institutionalTrend;
-            trendEl.style.color = institutionalData.institutionalTrend.includes("增持") ? "#4caf50" : 
-                                  institutionalData.institutionalTrend.includes("减持") ? "#f44336" : "#aaa";
+            
+            if (institutionEl) institutionEl.innerText = institutionalData.institutionOwnership;
+            if (trendEl) {
+                trendEl.innerText = institutionalData.institutionalTrend;
+                trendEl.style.color = institutionalData.institutionalTrend.includes("增持") ? "#4caf50" : 
+                                      institutionalData.institutionalTrend.includes("减持") ? "#f44336" : "#aaa";
+            }
+        } else {
+            console.warn("⚠️ institutionalData为空，跳过机构持股更新");
         }
         
         // Market Sentiment
         if (sentiment) {
-            document.getElementById("adv-sentiment-score").innerText = sentiment.score + "/100";
+            const sentimentScoreEl = document.getElementById("adv-sentiment-score");
             const levelEl = document.getElementById("adv-sentiment-level");
-            levelEl.innerText = `(${sentiment.level})`;
-            const score = parseFloat(sentiment.score);
-            levelEl.style.color = score > 70 ? "#ff9800" : score < 30 ? "#4caf50" : "#aaa";
+            
+            if (sentimentScoreEl) sentimentScoreEl.innerText = sentiment.score + "/100";
+            if (levelEl) {
+                levelEl.innerText = `(${sentiment.level})`;
+                const score = parseFloat(sentiment.score);
+                levelEl.style.color = score > 70 ? "#ff9800" : score < 30 ? "#4caf50" : "#aaa";
+            }
             
             // Update macro ribbon sentiment section
             const sentimentEl = document.getElementById("macro-sentiment");
@@ -863,6 +919,8 @@ class TradingAssistant {
                 else if (sentiment.level.includes("悲观")) { icon = '😔'; color = '#64b5f6'; }
                 sentimentEl.innerHTML = `<span style="color:${color}">${icon} ${sentiment.score}/100</span>`;
             }
+        } else {
+            console.warn("⚠️ sentiment为空，跳过市场情绪更新");
         }
     }
 
@@ -882,25 +940,61 @@ class TradingAssistant {
 
     async updateAdvancedDataPeriodically() {
         const symbol = this.state.symbol;
-        if (!symbol || symbol === "DETECTED" || symbol === "扫描中...") return;
+        if (!symbol || symbol === "DETECTED" || symbol === "扫描中...") {
+            console.log("⏳ 等待symbol识别...", symbol);
+            return;
+        }
+        
+        console.log("🔄 开始更新高级数据:", symbol);
         
         try {
-            // 获取所有高级数据
-            const [detailedQuote, optionsData, analystRatings, institutionalData] = await Promise.all([
-                this.fetchDetailedQuote(symbol),
-                this.fetchOptionsData(symbol),
-                this.fetchAnalystRatings(symbol),
-                this.fetchInstitutionalData(symbol)
-            ]);
+            // 获取所有高级数据（独立处理，失败不影响其他）
+            let detailedQuote = null;
+            let optionsData = null;
+            let analystRatings = null;
+            let institutionalData = null;
+            let sentiment = null;
             
-            // 计算市场情绪
-            const sentiment = await this.calculateMarketSentiment(symbol, detailedQuote);
+            try {
+                detailedQuote = await this.fetchDetailedQuote(symbol);
+                console.log("📊 详细报价:", detailedQuote ? "成功" : "失败");
+            } catch (e) {
+                console.warn("❌ 详细报价失败:", e.message);
+            }
             
-            // 更新UI
+            try {
+                optionsData = await this.fetchOptionsData(symbol);
+                console.log("🎲 期权数据:", optionsData ? "成功" : "失败");
+            } catch (e) {
+                console.warn("❌ 期权数据失败:", e.message);
+            }
+            
+            try {
+                analystRatings = await this.fetchAnalystRatings(symbol);
+                console.log("👔 分析师评级:", analystRatings ? "成功" : "失败");
+            } catch (e) {
+                console.warn("❌ 分析师评级失败:", e.message);
+            }
+            
+            try {
+                institutionalData = await this.fetchInstitutionalData(symbol);
+                console.log("🏦 机构持股:", institutionalData ? "成功" : "失败");
+            } catch (e) {
+                console.warn("❌ 机构持股失败:", e.message);
+            }
+            
+            try {
+                sentiment = await this.calculateMarketSentiment(symbol, detailedQuote);
+                console.log("😊 市场情绪:", sentiment ? "成功" : "失败");
+            } catch (e) {
+                console.warn("❌ 市场情绪失败:", e.message);
+            }
+            
+            // 更新UI（即使部分数据为null也更新）
             this.updateMacroRibbon();
             this.updateAdvancedData(detailedQuote, optionsData, analystRatings, institutionalData, sentiment);
             
-            console.log("✅ 高级数据已更新:", symbol);
+            console.log("✅ 高级数据UI已更新:", symbol);
         } catch (error) {
             console.error("❌ 高级数据更新失败:", error);
         }
