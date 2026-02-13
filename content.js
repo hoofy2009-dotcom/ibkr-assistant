@@ -3119,52 +3119,10 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         }
 
         try {
-            // 检查API密钥
-            if (!this.apiKeys.finnhubKey) {
-                console.warn("🏦 Finnhub API密钥未配置");
-                return this.getDefaultInstitutionalData();
-            }
+            // 注意：Finnhub的ownership API仅付费版提供（免费版返回403）
+            console.log("🏦 机构持股数据需要Finnhub付费版，返回默认值");
             
-            console.log("🏦 使用Finnhub API获取机构持股:", symbol);
-            
-            // Finnhub机构持股API
-            const url = `https://finnhub.io/api/v1/stock/ownership?symbol=${symbol}&token=${this.apiKeys.finnhubKey}`;
-            const rawText = await this.proxyFetch(url);
-            const data = JSON.parse(rawText);
-            
-            if (!data || !data.ownership) {
-                console.warn("🏦 Finnhub无机构持股数据");
-                return this.getDefaultInstitutionalData();
-            }
-            
-            const ownership = data.ownership || [];
-            
-            // 提取前5大机构
-            const topHolders = ownership.slice(0, 5).map(inst => ({
-                name: inst.name || "Unknown",
-                shares: this.formatVolume(inst.share || 0),
-                change: inst.change || 0
-            }));
-            
-            // 计算平均变化
-            const avgChange = topHolders.length > 0
-                ? (topHolders.reduce((sum, h) => sum + (h.change || 0), 0) / topHolders.length).toFixed(2)
-                : 0;
-            
-            const result = {
-                // 机构持股比例
-                institutionOwnership: data.institutionOwnershipPercent ? `${data.institutionOwnershipPercent.toFixed(2)}%` : "N/A",
-                insiderOwnership: "N/A", // Finnhub不提供内部人持股比例
-                
-                // 机构动向
-                institutionalTrend: avgChange > 2 ? "增持📈" : avgChange < -2 ? "减持📉" : "稳定",
-                avgInstitutionalChange: avgChange + "%",
-                topHolders: topHolders,
-                
-                // 内部交易（Finnhub提供但需额外API调用）
-                recentInsiderTransactions: [],
-                insiderSentiment: "数据不可用"
-            };
+            const result = this.getDefaultInstitutionalData();
 
             if (!this.institutionalCache) this.institutionalCache = {};
             this.institutionalCache[cacheKey] = { data: result, ts: Date.now() };
@@ -3172,7 +3130,7 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             return result;
         } catch (e) {
             console.warn(`Failed to fetch institutional data for ${symbol}`, e);
-            return null;
+            return this.getDefaultInstitutionalData();
         }
     }
 
