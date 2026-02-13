@@ -1519,6 +1519,8 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
     }
 
     updateJournalStats() {
+        // 若DOM尚未渲染完毕，直接跳过，避免null.innerText报错
+        if (!document.getElementById("v2-journal")) return;
         if (!this.state.trades) return;
 
         const total = this.state.trades.length;
