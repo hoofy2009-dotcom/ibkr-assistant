@@ -769,13 +769,13 @@ class TradingAssistant {
     updateMacroRibbon() {
         if (!this.macroCache) return;
         
-        const { spy, vix, regime } = this.macroCache;
+        const { spx, vix, regime } = this.macroCache;
         
         // Update market section
         const marketEl = document.getElementById("macro-market");
-        if (marketEl && spy) {
-            const color = spy.changePct > 0 ? '#4caf50' : spy.changePct < 0 ? '#f44336' : '#aaa';
-            marketEl.innerHTML = `<span style="color:${color}">📊 SPY ${spy.fmt}</span>`;
+        if (marketEl && spx) {
+            const color = spx.changePct > 0 ? '#4caf50' : spx.changePct < 0 ? '#f44336' : '#aaa';
+            marketEl.innerHTML = `<span style="color:${color}">📊 S&P ${spx.fmt}</span>`;
         }
         
         // Update VIX section
@@ -1868,15 +1868,15 @@ class TradingAssistant {
             let marketAssessment = "大盘数据加载中...";
             let tradingRisk = "中等";
             if (this.macroCache) {
-                const { spy, dji, nasdaq, vix } = this.macroCache;
+                const { spx, dow, nasdaq, vix } = this.macroCache;
                 const parts = [];
-                if (spy) parts.push(`SPY ${spy.fmt}`);
-                if (dji) parts.push(`道琼斯 ${dji.fmt}`);
+                if (spx) parts.push(`标普 ${spx.fmt}`);
+                if (dow) parts.push(`道琼斯 ${dow.fmt}`);
                 if (nasdaq) parts.push(`纳斯达克 ${nasdaq.fmt}`);
                 marketAssessment = parts.join(" | ");
                 
                 // 评估做T风险
-                const avgChange = [spy?.changePct, dji?.changePct, nasdaq?.changePct]
+                const avgChange = [spx?.changePct, dow?.changePct, nasdaq?.changePct]
                     .filter(v => v != null)
                     .reduce((sum, v) => sum + v, 0) / 3;
                 
@@ -3595,14 +3595,21 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         if (this.macroCache && (Date.now() - this.macroCache.ts < 300000)) return; 
         
         try {
-            // Try primary providers, but prefer external professional sources when available
-            const [spy, xlk, xlf, iwm, dji, nasdaq] = await Promise.all([
-                this.fetchTickerData("SPY"),
+            // 指数优先取真实指数 (^GSPC/^DJI/^IXIC)，失败时降级ETF代理
+            let [spx, dow, nasdaq] = await Promise.all([
+                this.fetchTickerData("^GSPC"),
+                this.fetchTickerData("^DJI"),
+                this.fetchTickerData("^IXIC")
+            ]);
+            if (!spx) spx = await this.fetchTickerData("SPY");
+            if (!dow) dow = await this.fetchTickerData("DIA");
+            if (!nasdaq) nasdaq = await this.fetchTickerData("QQQ");
+
+            // 行业/小盘指标
+            const [xlk, xlf, iwm] = await Promise.all([
                 this.fetchTickerData("XLK"),
                 this.fetchTickerData("XLF"),
-                this.fetchTickerData("IWM"),
-                this.fetchTickerData("^DJI"),    // 道琼斯工业指数
-                this.fetchTickerData("^IXIC")   // 纳斯达克综合指数
+                this.fetchTickerData("IWM")
             ]);
 
             // For VIX and TNX try external providers first (CBOE / TradingView via proxyFetch)
@@ -3620,14 +3627,14 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             else if (vixVal > 30) regime = "Extreme Fear (Crash)";
             else if (vixVal > 20) regime = "High Vol (Risk-Off)";
             
-            const summary = `SPY:${spy?spy.fmt:"--"} | VIX:${vixVal.toFixed(1)}(${regime}) | 10Y:${tnx?tnx.price.toFixed(2)+"%":"--"} | XLK:${xlk?xlk.fmt:"--"} XLF:${xlf?xlf.fmt:"--"}`;
+            const summary = `S&P500:${spx?spx.fmt:"--"} | Dow:${dow?dow.fmt:"--"} | Nasdaq:${nasdaq?nasdaq.fmt:"--"} | VIX:${vixVal.toFixed(1)}(${regime}) | 10Y:${tnx?tnx.price.toFixed(2)+"%":"--"}`;
 
             this.macroCache = { 
                 summary,
                 vix: vixVal,
                 regime,
-                spy,
-                dji,
+                spx,
+                dow,
                 nasdaq,
                 xlk,
                 ts: Date.now() 
@@ -3641,7 +3648,7 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 
                 ribbon.innerHTML = `
                     <span style="font-weight:bold;color:${color}">VIX: ${vixVal.toFixed(2)} (${regime})</span>
-                    <span style="margin-left:10px;font-size:0.9em;color:#aaa">SPY ${spy?spy.fmt:"--"} | XLK ${xlk?xlk.fmt:"--"}</span>
+                    <span style="margin-left:10px;font-size:0.9em;color:#aaa">S&P ${spx?spx.fmt:"--"} | Dow ${dow?dow.fmt:"--"} | Nasdaq ${nasdaq?nasdaq.fmt:"--"}</span>
                 `;
             }
         } catch(e) {
