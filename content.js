@@ -3048,30 +3048,43 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
         try {
             console.log("👔 爬取Yahoo Finance分析师评级:", symbol);
             
-            // 方法1: 从analysis页面提取JSON数据
             let recommendations = null;
             let priceTargets = { targetLow: 0, targetHigh: 0, targetMean: 0 };
+
+            // helper: 解析一次HTML
+            const parseOnce = (html, source) => {
+                console.log(`👔 HTML预览(${source}):`, html.substring(0, 200));
+                const rec = this.parseAnalystRecommendations(html);
+                const pt = this.parsePriceTargets(html);
+                if (rec) console.log(`👔 ✅ 成功解析推荐评级(${source}):`, rec);
+                if (pt?.targetMean > 0) console.log(`👔 ✅ 成功解析目标价(${source}):`, pt);
+                return { rec, pt };
+            };
             
+            // 方法1: analysis 页面 + p 参数
             try {
-                const analysisUrl = `https://finance.yahoo.com/quote/${symbol}/analysis`;
+                const analysisUrl = `https://finance.yahoo.com/quote/${symbol}/analysis?p=${symbol}`;
                 console.log("👔 请求页面:", analysisUrl);
                 const html = await this.proxyFetch(analysisUrl);
-                
-                // 打印前500个字符用于调试（确认是否被Yahoo拦截）
-                console.log("👔 HTML预览:", html.substring(0, 500));
-                
-                // 从HTML中提取嵌入的JSON数据
-                recommendations = this.parseAnalystRecommendations(html);
-                priceTargets = this.parsePriceTargets(html);
-                
-                if (recommendations) {
-                    console.log("👔 ✅ 成功解析推荐评级:", recommendations);
-                }
-                if (priceTargets.targetMean > 0) {
-                    console.log("👔 ✅ 成功解析目标价:", priceTargets);
-                }
+                const { rec, pt } = parseOnce(html, "analysis");
+                recommendations = rec;
+                priceTargets = pt;
             } catch (e) {
                 console.warn("👔 ❌ 爬取失败:", e.message);
+            }
+
+            // 方法2: quote 主页面 兜底（有时分析页被跳转到 Symbol Lookup）
+            if (!recommendations || (!priceTargets || priceTargets.targetMean === 0)) {
+                try {
+                    const quoteUrl = `https://finance.yahoo.com/quote/${symbol}?p=${symbol}`;
+                    console.log("👔 兜底请求页面:", quoteUrl);
+                    const html2 = await this.proxyFetch(quoteUrl);
+                    const { rec, pt } = parseOnce(html2, "quote");
+                    if (!recommendations) recommendations = rec;
+                    if (!priceTargets || priceTargets.targetMean === 0) priceTargets = pt;
+                } catch (e) {
+                    console.warn("👔 兜底请求失败:", e.message);
+                }
             }
             
             // 构造结果
@@ -3141,6 +3154,10 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             const titleMatch = html.match(/<title>([^<]*)<\/title>/);
             if (titleMatch) {
                 console.log("👔 页面标题:", titleMatch[1]);
+                if (/Symbol Lookup/i.test(titleMatch[1])) {
+                    console.warn("👔 页面是 Symbol Lookup，可能被跳转或符号无效");
+                    return null;
+                }
             } else {
                 console.warn("👔 未找到页面标题，可能是无效HTML");
             }
@@ -3504,9 +3521,9 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             else if (macdSignal.includes("空头")) { sentimentScore -= 5; factors.push("MACD空头-5"); }
 
             // 3. 量价因子（15分）
-            if (detailedQuote) {
-                const volRatio = parseFloat(detailedQuote.volumeRatio);
-                const priceChange = this.state.lastPrice - this.state.history[this.state.history.length - 2] || 0;
+            if (detailedQuote && this.state?.history?.length >= 2) {
+                const volRatio = parseFloat(detailedQuote.volumeRatio || "0");
+                const priceChange = (this.state.lastPrice || 0) - (this.state.history[this.state.history.length - 2] || 0);
                 
                 if (volRatio > 1.5 && priceChange > 0) { sentimentScore += 10; factors.push("放量上涨+10"); }
                 else if (volRatio > 1.5 && priceChange < 0) { sentimentScore -= 10; factors.push("放量下跌-10"); }
@@ -3514,10 +3531,12 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             }
 
             // 4. 52周位置因子（10分）
-            if (detailedQuote?.fiftyTwoWeekPosition !== "N/A") {
+            if (detailedQuote && detailedQuote.fiftyTwoWeekPosition && detailedQuote.fiftyTwoWeekPosition !== "N/A") {
                 const pos = parseFloat(detailedQuote.fiftyTwoWeekPosition);
-                if (pos > 80) { sentimentScore -= 8; factors.push("年度高位-8"); }
-                else if (pos < 20) { sentimentScore += 8; factors.push("年度低位+8"); }
+                if (!Number.isNaN(pos)) {
+                    if (pos > 80) { sentimentScore -= 8; factors.push("年度高位-8"); }
+                    else if (pos < 20) { sentimentScore += 8; factors.push("年度低位+8"); }
+                }
             }
 
             // 5. 板块强弱因子（10分）
@@ -3545,7 +3564,12 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             };
         } catch (e) {
             console.warn(`Failed to calculate market sentiment for ${symbol}`, e);
-            return null;
+            return {
+                score: 50,
+                level: "中性",
+                factors: ["情绪计算缺少行情数据，使用默认值"],
+                recommendation: "行情数据不足，建议刷新或稍后再试"
+            };
         }
     }
 
