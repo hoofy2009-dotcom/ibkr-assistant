@@ -19,7 +19,8 @@ class TradingAssistant {
             minimized: false,
             lastDomScan: 0,
             lastDomPrice: 0,
-            updateInterval: 20000 // 默认20秒，可动态调整
+            updateInterval: 20000, // 默认20秒，可动态调整
+            spyChange: 0 // 🚨 大盘涨跌幅 - 用于大盘过滤
         };
 
         // 性能优化：Watchlist历史数据追踪
@@ -3714,6 +3715,13 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
             if (vixVal < 15) regime = "Low Vol (Complacency)";
             else if (vixVal > 30) regime = "Extreme Fear (Crash)";
             else if (vixVal > 20) regime = "High Vol (Risk-Off)";
+            
+            // 🚨 计算并设置SPY涨跌幅 (用于大盘过滤)
+            if (spx && spx.changePct !== undefined) {
+                this.state.spyChange = spx.changePct;
+            } else {
+                this.state.spyChange = 0; // 无数据时默认0
+            }
             
             const summary = `S&P500:${spx?spx.fmt:"--"} | Dow:${dow?dow.fmt:"--"} | Nasdaq:${nasdaq?nasdaq.fmt:"--"} | VIX:${vixVal.toFixed(1)}(${regime}) | 10Y:${tnx?tnx.price.toFixed(2)+"%":"--"}`;
 
