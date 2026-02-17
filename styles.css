@@ -243,9 +243,9 @@
     color: #aaa;
     margin-right: 2px;
 }
-.mini-wl-symbol { font-weight: bold; color: #ddd; width: 35px; flex-shrink: 0; white-space: nowrap; overflow: hidden; }
+.mini-wl-symbol { font-weight: bold; color: #ddd; width: 60px; flex-shrink: 0; white-space: nowrap; overflow: visible; }
 .mini-wl-price { text-align: right; width: 50px; margin-right: 4px; color: #eee; font-family: monospace; }
-.mini-wl-action { text-align: center; width: 36px; font-size: 9px; flex-shrink: 0; margin-right: 4px; }
+.mini-wl-action { text-align: center; width: 70px; font-size: 9px; flex-shrink: 0; margin-right: 4px; }
 .mini-wl-change { text-align: right; width: 50px; flex-shrink: 0; font-family: monospace; }
 
 /* Settings Styles (Adapted) */

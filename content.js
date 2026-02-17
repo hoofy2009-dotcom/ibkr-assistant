@@ -4278,24 +4278,50 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 }
 
                 // 如果有新鲜的AI决策，则直接复用，确保Watchlist与AI一致
+                // 🚨 但AI决策也需要应用大盘过滤!
                 const aiDecision = this.aiDecisionCache.get(sym);
                 const aiFresh = aiDecision && (Date.now() - aiDecision.ts < 15 * 60 * 1000);
                 if (aiFresh) {
                     const aiAct = (aiDecision.action || "HOLD").toUpperCase();
+                    const spyChange = this.state.spyChange || 0;
                     decisionSource = "AI";
+                    
+                    // 🔴 大盘过滤: AI买入建议也需要检查大盘环境
                     if (aiAct === "BUY") {
-                        action = "\u{1F9E0}买入"; // 🧠
-                        actionColor = "#4caf50";
+                        if (spyChange <= -1) {
+                            // 大盘跌>1%: AI建议买入,但大盘过滤改为观望
+                            action = "\u{1F6AB}观望"; // 🚫
+                            actionColor = "#9e9e9e";
+                            actionReason = `AI建议买入,但🔴大盘暴跌${spyChange.toFixed(2)}%,禁止抄底!`;
+                        } else if (spyChange <= -0.5) {
+                            // 大盘弱势: 谨慎
+                            action = "\u26A0\uFE0F谨慎"; // ⚠️
+                            actionColor = "#ff9800";
+                            actionReason = `AI建议买入,但⚠️大盘弱势${spyChange.toFixed(2)}%,抄底风险高`;
+                        } else {
+                            action = "\u{1F9E0}买入"; // 🧠
+                            actionColor = "#4caf50";
+                            const sent = aiDecision.sentiment ? `情绪 ${aiDecision.sentiment}/10` : "AI verdict";
+                            actionReason = aiDecision.summary || sent;
+                            if (spyChange >= 1) {
+                                actionReason += `\n\u{1F7E2} 大盘强势${spyChange.toFixed(2)}%`;
+                            }
+                        }
                     } else if (aiAct === "SELL") {
                         action = "\u{1F9E0}卖出";
                         actionColor = "#f44336";
+                        const sent = aiDecision.sentiment ? `情绪 ${aiDecision.sentiment}/10` : "AI verdict";
+                        actionReason = aiDecision.summary || sent;
+                        if (spyChange <= -1) {
+                            actionReason += `\n\u{1F534} 大盘弱势${spyChange.toFixed(2)}%，卖出更安全`;
+                        }
                     } else {
                         action = "\u{1F9E0}观望";
                         actionColor = "#9e9e9e";
+                        const sent = aiDecision.sentiment ? `情绪 ${aiDecision.sentiment}/10` : "AI verdict";
+                        actionReason = aiDecision.summary || sent;
                     }
 
-                    const sent = aiDecision.sentiment ? `情绪 ${aiDecision.sentiment}/10` : "AI verdict";
-                    actionReason = aiDecision.summary || sent;
                     if (volatilityAlert) actionReason += `\n${volatilityAlert}`;
                 } else {
                     // 🚨 散户铁律: 大盘优先过滤 (大盘为王!)
