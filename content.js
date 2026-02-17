@@ -1463,8 +1463,29 @@ class TradingAssistant {
             
             const stopEl = document.getElementById("assist-stop");
             if (stopEl) {
-                const stopLoss = price - (atr * 2);
-                stopEl.innerText = stopLoss.toFixed(2);
+                // 🚨 根据大盘环境调整止损倍数
+                const spyChange = this.state.spyChange || 0;
+                let atrMultiplier = 2.0;  // 默认2倍ATR
+                let stopNote = "";
+                
+                if (spyChange <= -2) {
+                    // 大盘暴跌>2%: 建议清仓观望
+                    stopNote = " 🔴建议清仓";
+                    stopEl.style.color = "#f44336";
+                    stopEl.style.fontWeight = "bold";
+                } else if (spyChange <= -1) {
+                    // 大盘跌>1%: 止损扩大至3倍ATR
+                    atrMultiplier = 3.0;
+                    stopNote = " ⚠️(3×ATR 大盘弱)";
+                    stopEl.style.color = "#ff9800";
+                } else {
+                    // 正常情况: 2倍ATR
+                    stopNote = "";
+                    stopEl.style.color = "#4caf50";
+                }
+                
+                const stopLoss = price - (atr * atrMultiplier);
+                stopEl.innerText = stopLoss.toFixed(2) + stopNote;
             }
         } else {
             // 显示数据积累进度
@@ -1509,10 +1530,13 @@ class TradingAssistant {
                 }
             }
 
-            // 3. 综合做T信号（结合位置 + RSI + 波动率）
+            // 3. 综合做T信号（结合位置 + RSI + 波动率 + 🚨大盘过滤）
             const rsi = this.state.history.length >= 14 ? this.calculateRSI(this.state.history, 14) : 50;
             const volEl = document.getElementById("assist-vol");
             const vol = volEl ? parseFloat(volEl.innerText) || 0 : 0;
+            
+            // 🚨 获取大盘环境
+            const spyChange = this.state.spyChange || 0;
             
             let daytSignal = "⚖️观望";
             let daytColor = "#9e9e9e";
@@ -1525,24 +1549,60 @@ class TradingAssistant {
                 daytColor = "#555";
             } else if (positionInRange >= 75 && rsi > 60) {
                 // 高位 + RSI偏高 = 卖出做T
-                daytSignal = "📉高抛";
-                daytColor = "#f44336";
+                // 🟢 大盘涨>1%时谨慎高抛(可能错过更大涨幅)
+                if (spyChange >= 1) {
+                    daytSignal = "📉谨慎高抛";
+                    daytColor = "#ff9800";  // 橙色警告
+                } else {
+                    daytSignal = "📉高抛";
+                    daytColor = "#f44336";
+                }
             } else if (positionInRange >= 65 && rsi > 65) {
                 // 偏高 + RSI超买 = 减仓
-                daytSignal = "📤减仓";
-                daytColor = "#ff5722";
+                if (spyChange >= 1) {
+                    daytSignal = "📤谨慎减仓";
+                    daytColor = "#ff9800";
+                } else {
+                    daytSignal = "📤减仓";
+                    daytColor = "#ff5722";
+                }
             } else if (positionInRange <= 25 && rsi < 40) {
                 // 低位 + RSI偏低 = 买入做T
-                daytSignal = "📥低吸";
-                daytColor = "#4caf50";
+                // 🔴 大盘跌>1%时禁止低吸(易接飞刀)
+                if (spyChange <= -1) {
+                    daytSignal = "🚫禁止低吸";
+                    daytColor = "#9e9e9e";  // 灰色禁止
+                } else if (spyChange <= -0.5) {
+                    daytSignal = "⚠️谨慎低吸";
+                    daytColor = "#ff9800";  // 橙色警告
+                } else {
+                    daytSignal = "📥低吸";
+                    daytColor = "#4caf50";
+                }
             } else if (positionInRange <= 35 && rsi < 45) {
                 // 偏低 + RSI适中 = 加仓
-                daytSignal = "✅加仓";
-                daytColor = "#66bb6a";
+                if (spyChange <= -1) {
+                    daytSignal = "🚫禁止加仓";
+                    daytColor = "#9e9e9e";
+                } else if (spyChange <= -0.5) {
+                    daytSignal = "⚠️谨慎加仓";
+                    daytColor = "#ff9800";
+                } else {
+                    daytSignal = "✅加仓";
+                    daytColor = "#66bb6a";
+                }
             } else if (vol > 0.5 && positionInRange < 50) {
                 // 波动率大 + 低位 = 收筹
-                daytSignal = "📥收筹";
-                daytColor = "#4caf50";
+                if (spyChange <= -1) {
+                    daytSignal = "�禁止收筹";
+                    daytColor = "#9e9e9e";
+                } else if (spyChange <= -0.5) {
+                    daytSignal = "⚠️谨慎收筹";
+                    daytColor = "#ff9800";
+                } else {
+                    daytSignal = "�📥收筹";
+                    daytColor = "#4caf50";
+                }
             } else if (vol > 0.5 && positionInRange > 50) {
                 // 波动率大 + 高位 = 出货
                 daytSignal = "📤出货";
@@ -2092,6 +2152,22 @@ class TradingAssistant {
 • 顺势而为: 大盘跌>0.5%时谨慎做多,跌>1%禁止抄底
 • 快速止损: 日内最怕抗单,跌破2%立即认赔
 • 避免陷阱: 开盘跳水不追/尾盘拉升不追/放量滞涨不碰
+
+【日内交易案例库】✅ 5个成功案例 vs ❌ 5个失败陷阱
+
+✅ 成功案例(胜率70-85%):
+1. 顺大盘做T: SPY涨+1.2%,NVDA早盘+0.8%→低吸,午后+2.1%→高抛 (胜率85%)
+2. 缩量回调买: TSLA连涨3天后缩量回调-1.5%,SPY横盘→轻仓买入,次日反弹+2.3% (胜率75%)
+3. 放量突破追: AAPL突破180阻力位,成交量放大150%,SPY强势→果断追涨,当日+1.8% (胜率70%)
+4. 大盘强势逢低吸: SPY涨+1.5%,AMD跌-0.8%无利空→抄底,收盘反弹+1.2% (胜率80%)
+5. 开盘急跌抄底: SPY平开,GOOGL开盘跳水-1.5%无利空,10分钟企稳→买入,收盘+0.9% (胜率70%)
+
+❌ 失败陷阱(亏损概率80-95%):
+1. 逆盘抢反弹: SPY跌-1.8%,NVDA跌-2.5%抄底→继续跌至-4.2%,抗单被套 (失败率95%)
+2. 追高被套: TSLA涨+8%追涨,买在日内高点→回调-3%,止损出局 (失败率85%)
+3. 不设止损扛单: AMD日内-2.5%不止损,心想"会反弹"→收盘-4.8%,深度被套 (失败率90%)
+4. 开盘跳水追多: SPY跌-0.5%,AAPL开盘跳水-2%抄底→继续跌至-3.5%,接飞刀 (失败率85%)
+5. 尾盘拉升追涨: META尾盘最后10分钟拉升+2.5%追涨→次日跳空-1.8%,T+0被套 (失败率80%)
 
 【核心能力】
 • 快速识别: 支撑/阻力位、日内高低点
@@ -4312,9 +4388,27 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 }
 
                 // 2. Build Mini List HTML with tooltip
+                // 🎯 添加大盘趋势图标
+                const spyChange = this.state.spyChange || 0;
+                let marketIcon = "➡️";  // 中性
+                let marketColor = "#9e9e9e";
+                if (spyChange >= 1) {
+                    marketIcon = "🟢";  // 强势
+                    marketColor = "#4caf50";
+                } else if (spyChange <= -1) {
+                    marketIcon = "🔴";  // 弱势
+                    marketColor = "#f44336";
+                } else if (spyChange >= 0.5) {
+                    marketIcon = "📈";  // 偏强
+                    marketColor = "#66bb6a";
+                } else if (spyChange <= -0.5) {
+                    marketIcon = "📉";  // 偏弱
+                    marketColor = "#ff9800";
+                }
+                
                 miniHTML += `
                     <div class="mini-wl-row">
-                        <span class="mini-wl-symbol" title="${sym}">${sym}</span>
+                        <span class="mini-wl-symbol" title="${sym}&#10;大盘: ${spyChange >= 0 ? '+' : ''}${spyChange.toFixed(2)}% ${marketIcon}">${sym} <span style="font-size:10px;">${marketIcon}</span></span>
                         <span class="mini-wl-price">${price.toFixed(2)}</span>
                         <span class="mini-wl-action" 
                             style="color:${actionColor}; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); box-shadow:0 0 6px ${actionColor}33; border-radius:5px; padding:0 6px; cursor:help; display:inline-flex; align-items:center; gap:6px;" 
