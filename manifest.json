@@ -1,7 +1,7 @@
 ﻿{
   "manifest_version": 3,
   "name": "IBKR Trading Assistant",
-  "version": "2.0",
+  "version": "2.1",
   "description": "Real-time trading strategy assistant for IBKR Portal",
   "background": {
     "service_worker": "background.js"
