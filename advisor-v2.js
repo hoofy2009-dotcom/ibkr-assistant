@@ -1191,72 +1191,80 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
             marketContext = parts.join(" | ");
         }
         
-        // 构建增强提示词 - V2 深度分析版本
+        // 构建增强提示词 - 散户生存优先版本
         const prompt = `
-            作为**首席投资官(CIO)**，请对 ${this.state.symbol} 进行深度分析：
+            作为**专业投资顾问**，请为散户投资者分析 ${this.state.symbol}：
             
-            【大盘环境】(市场背景 - 权重30%)
-            今日美股三大指数表现: ${marketContext}
-            ${this.macroCache && this.macroCache.spy && this.macroCache.spy.changePct < -1 ? '⚠️ 大盘承压，个股操作需谨慎' : ''}
-            ${this.macroCache && this.macroCache.spy && this.macroCache.spy.changePct > 1 ? '✅ 大盘强势，有利于个股表现' : ''}
+            【核心原则】散户必须顺势而为，大盘方向 > 个股信号！
             
-            【技术面数据】(量化信号 - 权重40%)
-            - RSI(14): ${rsi.toFixed(2)} ${rsi < 30 ? '(超卖区 - 潜在反弹)' : rsi > 70 ? '(超买区 - 警惕回调)' : '(中性区)'}
-            - MACD: ${macd.histogram.toFixed(3)} ${macd.histogram > 0 ? '(多头趋势 - 金叉信号)' : '(空头趋势 - 死叉信号)'}
+            【大盘趋势】(最高优先级 - 权重50%) ⚠️ 散户第一要务
+            今日美股三大指数: ${marketContext}
+            ${this.macroCache && this.macroCache.spy && this.macroCache.spy.changePct < -1 ? '🚨 大盘下跌>1%，系统性风险！个股操作极度危险，强烈建议观望' : ''}
+            ${this.macroCache && this.macroCache.spy && this.macroCache.spy.changePct < -2 ? '🔴 大盘暴跌>2%，恐慌性抛售！散户此时买入=接飞刀，禁止操作' : ''}
+            ${this.macroCache && this.macroCache.spy && this.macroCache.spy.changePct > 1 ? '🟢 大盘强势上涨，市场情绪乐观，可考虑追涨强势股' : ''}
+            ${this.macroCache && this.macroCache.spy && Math.abs(this.macroCache.spy.changePct) < 0.5 ? '➡️ 大盘震荡，等待方向明确，控制仓位' : ''}
+            
+            ⚠️ **散户铁律**: 大盘跌>1%时，90%个股跟跌，此时不做多！
+            
+            【个股技术】(次要参考 - 权重30%)
+            - RSI(14): ${rsi.toFixed(2)} ${rsi < 30 ? '(超卖但需确认底部)' : rsi > 70 ? '(超买警惕出货)' : '(中性)'}
+            - MACD: ${macd.histogram.toFixed(3)} ${macd.histogram > 0 ? '(多头但看大盘脸色)' : '(空头趋势明确)'}
             - ATR(14): ${atr.toFixed(2)} (波动率 ${(atr/this.state.price*100).toFixed(1)}%)
             - 当前价: $${this.state.price.toFixed(2)}
-            - 技术止损位: $${(this.state.price - atr * 2).toFixed(2)} (基于 2×ATR)
+            - 止损位: $${(this.state.price - atr * 2).toFixed(2)}
             
-            【基本面情报】(新闻情绪 - 权重25%)
-            最近7天新闻标题：${newsText}
+            【新闻&财报】(辅助判断 - 权重20%)
+            新闻: ${newsText}
+            财报: ${earningsText}
             
-            【催化剂事件】(财报预期 - 权重35%)
-            ${earningsText}
+            【散户分析框架】(生存第一，盈利第二)
+            1. **大盘为王**: 大盘跌>1%→HOLD/SELL, 大盘涨>1%→可考虑BUY
+            2. **主力行为**: 放量滞涨=出货, 缩量上涨=谨慎, 放量上涨=追涨
+            3. **逆势股警惕**: 大盘跌个股涨→可能诱多或板块轮动，看清逻辑
+            4. **风险优先**: 不确定时选HOLD，宁可错过不可做错
+            5. **止损纪律**: 跌破止损位必须走，不要心存幻想
             
-            【分析要求】(多维度综合评估)
-            1. **技术+基本面结合**：不要只看技术指标,必须考虑新闻情绪和财报催化剂
-            2. **多空双向思考**：同时列出看涨理由(bull case)和看跌理由(bear case),然后权衡
-            3. **概率评估**：用"60%概率上涨"而非"必涨",置信度要诚实(0.5-0.7为常态)
-            4. **风险量化**：1-10分(5-6=中等风险, 7-8=中高风险, 9-10=极端风险)
-            5. **止损/目标位**：基于 ATR 和新闻情绪综合判断,给出具体数字
-            6. **简洁有力**：150字以内,突出核心逻辑(技术信号+基本面支撑+情绪催化)
+            【散户成功案例】(顺势而为的智慧)
+            ✅ 案例1: **顺大盘做多** - 大盘涨>1.5% + 个股突破阻力 + 成交量放大 → BUY(胜率80%)
+               示例: 2023年6月SPY涨2%时买入NVDA突破$400,3天涨至$440(+10%)
+               核心: 大盘给力时，龙头股爆发力最强
             
-            【经典成功案例】(历史验证的高胜率信号)
-            ✅ 案例1: **超卖反弹** - RSI<25 + 成交量萎缩 + 正面财报预期 → BUY(胜率75%)
-               示例: NVDA 2023年3月,RSI=22跌至$210,财报前夕反弹至$250(+19%)
+            ✅ 案例2: **大盘横盘抄底** - 大盘震荡±0.5% + 个股RSI<25 + 无负面新闻 → 小仓位BUY(胜率70%)
+               示例: SPY平盘时TSLA超卖至RSI=22,反弹+15%
+               核心: 大盘稳定时，超卖股有反弹空间
             
-            ✅ 案例2: **金叉突破** - MACD金叉 + 突破60日均线 + 行业轮动利好 → BUY(胜率70%)
-               示例: TSLA 2023年5月,MACD转正+突破$180阻力,3周涨至$240(+33%)
+            ✅ 案例3: **逆势股看逻辑** - 大盘跌但个股涨 + 重大利好(财报/新品) → 谨慎BUY(胜率60%)
+               示例: 2023年大盘跌1%但META因AI利好逆势涨5%
+               核心: 必须有清晰的独立催化剂，不能是诱多
             
-            ✅ 案例3: **财报惊喜** - EPS超预期>10% + 管理层上调指引 + RSI<50 → BUY(胜率80%)
-               示例: META 2023年Q3,EPS超15%+RSI=45,财报后3天涨超$30(+12%)
+            ✅ 案例4: **放量突破追涨** - 大盘涨 + 个股放量突破 + 板块轮动 → BUY(胜率75%)
+               示例: 半导体板块轮动时NVDA放量突破，5天+20%
+               核心: 量价配合+板块共振，成功率最高
             
-            ✅ 案例4: **情绪冰点** - 负面新闻密集 + RSI<20 + 估值历史低位 → 逆向买入(胜率65%)
-               示例: BABA 2022年10月,监管恐慌+RSI=18跌至$60,反弹至$90(+50%)
+            ✅ 案例5: **财报前观望** - 大盘不确定 + 财报前3天 → HOLD(避免损失胜率85%)
+               示例: 无数次财报暴跌，提前观望避免-20%亏损
+               核心: 不确定时不操作，就是最好的操作
             
-            ✅ 案例5: **趋势确认** - 连续3日MACD>0 + RSI 50-65(不超买) + 无重大负面 → 追涨(胜率68%)
-               示例: AAPL 2023年6月,MACD持续正值+iPhone销售超预期,月涨15%
+            【散户失败陷阱】(血的教训)
+            ❌ 陷阱1: **逆大盘抄底** - 大盘暴跌>2%时看个股RSI超卖就买入 → 继续跌20-40%
+               案例: 2022年美联储加息期间，多次"抄底"变"接飞刀"
+               规避: 🚨 大盘跌>1.5%时，禁止任何买入操作！等大盘企稳
             
-            【常见失败陷阱】(必须规避的致命错误)
-            ❌ 陷阱1: **接飞刀** - 单纯看RSI<30就买入,但下跌趋势未改(falling knife)
-               案例: BABA 2021年11月,RSI=28以为超卖,结果继续跌40%(中概监管风险)
-               规避: 必须等MACD转正或重大利好催化剂出现
+            ❌ 陷阱2: **追高接盘** - 个股已涨20%+但因FOMO追涨 → 高位站岗
+               案例: 2021年追高ARKK创新股，随后回撤-60%
+               规避: 涨幅>15%后追涨需确认大盘配合+成交量健康
             
-            ❌ 陷阱2: **利好兑现砸盘** - 财报前买入,财报利好当天反而暴跌(buy rumor, sell news)
-               案例: NFLX 2023年Q2,订阅超预期但财报日跌8%(预期已反映在股价)
-               规避: 财报前3天避免追高,等财报后市场消化再介入
+            ❌ 陷阱3: **死扛不止损** - 跌破止损位不砍仓，幻想"长期持有" → 亏损扩大
+               案例: 中概股2021年，不止损从-10%扛到-70%
+               规避: ⛔ 跌破止损位立即清仓，保住本金才能翻身
             
-            ❌ 陷阱3: **波动率陷阱** - ATR>8%时设2×ATR止损,容易被日内波动扫损
-               案例: TSLA 2023年1月,ATR=12%设止损$180,盘中触发但当天反弹至$195
-               规避: 高波动时扩大止损至3×ATR或减小仓位
+            ❌ 陷阱4: **放量滞涨不出** - 个股连续放量但涨幅微小(主力出货) → 随后暴跌
+               案例: 某科技股放量3天只涨2%，次周暴跌15%
+               规避: 放量滞涨=出货信号，果断减仓
             
-            ❌ 陷阱4: **新闻情绪误判** - AI情绪分析误判(讽刺/反转语义),导致反向操作
-               案例: 2023年某科技股"监管调查"被标记为负面,实际是"通过监管审查"
-               规避: 关键时刻人工复核新闻原文,不完全依赖情绪标签
-            
-            ❌ 陷阱5: **单一维度迷信** - 只看技术指标忽视基本面,或只看新闻忽视技术位
-               案例: 2022年某股MACD金叉但P/E=150(估值泡沫),买入后3月跌40%
-               规避: 技术+基本面+情绪三维度至少2个确认才能高置信操作
+            ❌ 陷阱5: **无脑信新闻** - 只看利好新闻买入，忽视大盘和技术 → 利好兑现即下跌
+               案例: "某公司获大单"新闻发布当天追涨，3天跌回原点
+               规避: 新闻只是参考，必须结合大盘趋势+技术位置
             
             返回JSON格式（不要Markdown代码块）：
             {
@@ -1265,18 +1273,21 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                 "stopLoss": 数字,
                 "target": 数字,
                 "risk": 1-10,
-                "reason": "核心理由(简要概括80字内)",
+                "reason": "核心理由(简要概括80字内,必须先说大盘环境)",
                 "newsImpact": "positive|negative|neutral",
                 "earningsRisk": "high|medium|low",
+                "marketTrend": "bullish|bearish|neutral (大盘趋势判断)",
+                "volumeSignal": "accumulation|distribution|neutral (主力资金流向:吸筹/出货/中性)",
                 "detailedReasoning": {
-                    "technical": "技术面分析(RSI/MACD/ATR信号,50字内)",
-                    "fundamental": "基本面分析(财报/估值/行业,50字内)",
-                    "sentiment": "情绪面分析(新闻/市场情绪,50字内)"
+                    "market": "大盘环境分析(SPY/QQQ趋势,50字内) - 最重要",
+                    "technical": "个股技术分析(RSI/MACD,40字内)",
+                    "volume": "成交量分析(放量/缩量/主力行为,40字内)"
                 },
-                "riskFactors": ["风险点1", "风险点2", "风险点3"],
-                "bullCase": "看涨理由(60%概率情景,40字内)",
-                "bearCase": "看跌理由(40%概率情景,40字内)",
-                "matchedPattern": "匹配的经典案例编号(如'案例1:超卖反弹')或'无明显匹配'"
+                "riskFactors": ["风险点1(大盘风险优先)", "风险点2", "风险点3"],
+                "retailAdvice": "给散户的建议(大盘不好时建议观望,40字内)",
+                "bullCase": "看涨情景(需要大盘配合,40字内)",
+                "bearCase": "看跌情景(散户最需防范,40字内)",
+                "matchedPattern": "匹配的散户案例编号或'无明显匹配'"
             }
         `;
 
@@ -1338,29 +1349,58 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
             result = result.replace(/```json/g, "").replace(/```/g, "").trim();
             const analysis = JSON.parse(result);
 
-            // === 置信度智能校准 (避免AI过度自信) ===
+            // === 散户优先的置信度校准 (大盘为王) ===
             let calibrationNote = "";
             
-            // 1. 高风险环境降低置信度
+            // 🚨 1. 大盘环境校准 (最高优先级 - 散户第一要务)
+            if (this.macroCache && this.macroCache.spy) {
+                const spyChange = this.macroCache.spy.changePct;
+                
+                // 大盘暴跌>2%: 个股BUY操作风险极高
+                if (spyChange < -2 && analysis.action === 'BUY') {
+                    analysis.confidence = Math.min(analysis.confidence, 0.4); // 强制降至40%以下
+                    analysis.risk = Math.max(analysis.risk, 9); // 风险提升至9
+                    calibrationNote += " [🔴大盘暴跌>2%,极度危险]";
+                }
+                // 大盘下跌1-2%: 买入需谨慎
+                else if (spyChange < -1 && analysis.action === 'BUY') {
+                    analysis.confidence *= 0.7; // 置信度打7折
+                    analysis.risk += 2; // 风险+2分
+                    calibrationNote += " [⚠️大盘下跌>1%,买入风险高]";
+                }
+                // 大盘下跌0.5-1%: 轻微降信
+                else if (spyChange < -0.5 && analysis.action === 'BUY') {
+                    analysis.confidence *= 0.85;
+                    analysis.risk += 1;
+                    calibrationNote += " [大盘承压]";
+                }
+                // 大盘大涨>1.5%: 卖出操作需谨慎(可能错过更大涨幅)
+                else if (spyChange > 1.5 && analysis.action === 'SELL') {
+                    analysis.confidence *= 0.8;
+                    calibrationNote += " [大盘强势,卖出或过早]";
+                }
+            }
+            
+            // 2. 高风险环境降低置信度
             if (analysis.confidence > 0.8 && analysis.risk >= 7) {
                 analysis.confidence = Math.min(analysis.confidence, 0.75);
                 calibrationNote += " [高风险降信]";
             }
             
-            // 2. 数据不足降低置信度
+            // 3. 数据不足降低置信度
             if (newsText.includes("暂无") || earningsText.includes("暂无")) {
                 analysis.confidence *= 0.85;
                 calibrationNote += " [数据不足]";
             }
             
-            // 3. 极端波动率警告
+            // 4. 极端波动率警告
             const volatilityRatio = (atr / this.state.price) * 100;
             if (volatilityRatio > 5) {
                 analysis.risk = Math.max(analysis.risk, 8);
                 calibrationNote += " [极端波动]";
             }
             
-            // 4. 技术指标冲突降低置信度
+            // 5. 技术指标冲突降低置信度
             const rsiOverbought = rsi > 70;
             const rsiOversold = rsi < 30;
             const macdBullish = macd.histogram > 0;
@@ -1371,10 +1411,13 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                 calibrationNote += " [信号冲突]";
             }
             
-            // 5. 限制置信度范围 (0.3-0.9)
+            // 6. 限制置信度范围 (0.3-0.9)
             analysis.confidence = Math.max(0.3, Math.min(0.9, analysis.confidence));
             
-            // 6. 添加校准说明到理由
+            // 7. 限制风险范围 (1-10)
+            analysis.risk = Math.max(1, Math.min(10, analysis.risk));
+            
+            // 8. 添加校准说明到理由
             if (calibrationNote) {
                 analysis.reason += calibrationNote;
             }
@@ -1398,9 +1441,34 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                 'low': '✅'
             };
 
-            // 显示结果（增强版 - 显示结构化决策依据）
+            // 显示结果（散户优先版 - 大盘+主力行为）
+            const marketTrendEmoji = {
+                'bullish': '🟢📈',
+                'bearish': '🔴📉',
+                'neutral': '➡️'
+            };
+            const marketTrendColor = {
+                'bullish': '#4caf50',
+                'bearish': '#f44336',
+                'neutral': '#999'
+            };
+            
+            const volumeEmoji = {
+                'accumulation': '💰🟢', // 主力吸筹
+                'distribution': '⚠️🔴', // 主力出货
+                'neutral': '➡️'
+            };
+            
             box.innerHTML = `
                 <div class="v2-analysis-result">
+                    ${analysis.marketTrend && analysis.marketTrend !== 'neutral' ? `
+                    <div style="background: ${marketTrendColor[analysis.marketTrend]}15; padding: 6px; border-radius: 4px; margin-bottom: 8px; border-left: 3px solid ${marketTrendColor[analysis.marketTrend]};">
+                        <span style="font-size: 11px; font-weight: bold; color: ${marketTrendColor[analysis.marketTrend]};">
+                            ${marketTrendEmoji[analysis.marketTrend]} 大盘${analysis.marketTrend === 'bullish' ? '强势' : '弱势'}
+                        </span>
+                    </div>
+                    ` : ''}
+                    
                     <div class="v2-action" style="color: ${analysis.action === 'BUY' ? '#4caf50' : analysis.action === 'SELL' ? '#f44336' : '#aaa'}; font-size: 16px; font-weight: bold; margin-bottom: 8px;">
                         ${analysis.action} (置信度: ${(analysis.confidence * 100).toFixed(0)}%)
                         ${analysis.matchedPattern && analysis.matchedPattern !== '无明显匹配' ? `<span style="font-size: 10px; color: #00bcd4; margin-left: 5px;">📚 ${analysis.matchedPattern}</span>` : ''}
@@ -1412,14 +1480,25 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                         <span>风险: <b>${analysis.risk}/10</b></span>
                     </div>
                     
-                    <div class="v2-fundamentals" style="display: flex; gap: 10px; margin-bottom: 10px; font-size: 10px; padding: 5px; background: rgba(255,255,255,0.05); border-radius: 3px;">
+                    <div class="v2-fundamentals" style="display: flex; gap: 10px; margin-bottom: 10px; font-size: 10px; padding: 5px; background: rgba(255,255,255,0.05); border-radius: 3px; flex-wrap: wrap;">
                         <span style="color: ${newsColor[analysis.newsImpact] || '#999'};">
                             ${newsEmoji[analysis.newsImpact] || '➡️'} 新闻: ${analysis.newsImpact || 'neutral'}
                         </span>
                         <span style="color: ${analysis.earningsRisk === 'high' ? '#f44336' : analysis.earningsRisk === 'low' ? '#4caf50' : '#ffa726'};">
-                            ${earningsEmoji[analysis.earningsRisk] || '⚡'} 财报风险: ${analysis.earningsRisk || 'medium'}
+                            ${earningsEmoji[analysis.earningsRisk] || '⚡'} 财报: ${analysis.earningsRisk || 'medium'}
                         </span>
+                        ${analysis.volumeSignal ? `
+                        <span style="color: ${analysis.volumeSignal === 'accumulation' ? '#4caf50' : analysis.volumeSignal === 'distribution' ? '#f44336' : '#999'};">
+                            ${volumeEmoji[analysis.volumeSignal] || '➡️'} ${analysis.volumeSignal === 'accumulation' ? '主力吸筹' : analysis.volumeSignal === 'distribution' ? '主力出货' : '资金中性'}
+                        </span>
+                        ` : ''}
                     </div>
+                    
+                    ${analysis.retailAdvice ? `
+                    <div style="background: rgba(255,152,0,0.1); padding: 6px; border-radius: 4px; margin-bottom: 8px; border-left: 3px solid #ff9800;">
+                        <span style="font-size: 10px; color: #ffb74d;"><b>💡 散户建议: </b>${analysis.retailAdvice}</span>
+                    </div>
+                    ` : ''}
                     
                     <div class="v2-reason" style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; font-size: 11px; line-height: 1.4; color: #ddd; margin-bottom: 8px;">
                         <b>核心理由：</b>${analysis.reason}
@@ -1429,9 +1508,9 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')}
                     <details style="font-size: 10px; margin-bottom: 8px; cursor: pointer;">
                         <summary style="color: #00bcd4; font-weight: bold; padding: 4px 0;">📊 三维度详细分析</summary>
                         <div style="padding: 6px; background: rgba(0,188,212,0.05); border-radius: 3px; margin-top: 4px;">
-                            <div style="margin-bottom: 4px;"><b style="color: #ff9800;">🔧 技术面：</b>${analysis.detailedReasoning.technical}</div>
-                            <div style="margin-bottom: 4px;"><b style="color: #4caf50;">📈 基本面：</b>${analysis.detailedReasoning.fundamental}</div>
-                            <div><b style="color: #f44336;">💬 情绪面：</b>${analysis.detailedReasoning.sentiment}</div>
+                            ${analysis.detailedReasoning.market ? `<div style="margin-bottom: 4px;"><b style="color: #00bcd4;">🌍 大盘：</b>${analysis.detailedReasoning.market}</div>` : ''}
+                            ${analysis.detailedReasoning.technical ? `<div style="margin-bottom: 4px;"><b style="color: #ff9800;">� 技术：</b>${analysis.detailedReasoning.technical}</div>` : ''}
+                            ${analysis.detailedReasoning.volume ? `<div><b style="color: #9c27b0;">� 成交量：</b>${analysis.detailedReasoning.volume}</div>` : ''}
                         </div>
                     </details>
                     ` : ''}
