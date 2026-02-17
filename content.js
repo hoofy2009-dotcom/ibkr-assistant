@@ -4422,22 +4422,28 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                 }
 
                 // 2. Build Mini List HTML with tooltip
-                // 🎯 添加大盘趋势图标
+                // 🎯 添加大盘趋势图标 (修复判断顺序)
                 const spyChange = this.state.spyChange || 0;
                 let marketIcon = "➡️";  // 中性
                 let marketColor = "#9e9e9e";
                 if (spyChange >= 1) {
-                    marketIcon = "🟢";  // 强势
+                    marketIcon = "🟢";  // 强势 ≥1%
                     marketColor = "#4caf50";
-                } else if (spyChange <= -1) {
-                    marketIcon = "🔴";  // 弱势
-                    marketColor = "#f44336";
                 } else if (spyChange >= 0.5) {
-                    marketIcon = "📈";  // 偏强
+                    marketIcon = "�";  // 偏强 0.5%-1%
                     marketColor = "#66bb6a";
+                } else if (spyChange > 0) {
+                    marketIcon = "➡️";  // 微涨 0%-0.5%
+                    marketColor = "#9e9e9e";
+                } else if (spyChange <= -1) {
+                    marketIcon = "�";  // 弱势 ≤-1%
+                    marketColor = "#f44336";
                 } else if (spyChange <= -0.5) {
-                    marketIcon = "📉";  // 偏弱
+                    marketIcon = "📉";  // 偏弱 -0.5%--1%
                     marketColor = "#ff9800";
+                } else {
+                    marketIcon = "➡️";  // 微跌 -0.5%-0%
+                    marketColor = "#9e9e9e";
                 }
                 
                 miniHTML += `
