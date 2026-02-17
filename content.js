@@ -4775,6 +4775,7 @@ class TradeExecutor {
 const startAssistant = async () => {
     if (!document.querySelector('.ibkr-assistant-panel')) {
         const app = new TradingAssistant();
+        window.ibkrAssist = app; // 🔍 暴露到全局供调试使用
         try {
             await app.initPromise;
         } catch (e) {
