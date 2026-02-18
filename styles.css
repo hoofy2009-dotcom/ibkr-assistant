@@ -163,9 +163,12 @@
     justify-content: center;
 }
 .modal-panel {
+    position: relative;
     background: #1e1e1e;
     border: 1px solid #007acc;
-    width: 320px;
+    width: auto;             /* 自适应内容宽度 */
+    min-width: 420px;        /* 保证四列不被压缩 */
+    max-width: 520px;        /* 防止过宽 */
     padding: 15px;
     border-radius: 6px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.8);
@@ -173,6 +176,8 @@
     max-height: 80vh;
     display: flex;
     flex-direction: column;
+    overflow-x: hidden;      /* 不要横向滚动条 */
+    overflow-y: auto;
 }
 .modal-header {
     font-size: 11px;
@@ -225,28 +230,32 @@
 .mini-watchlist {
     margin-top: 8px;
     padding-top: 5px;
-    padding-right: 5px; /* Add padding for scrollbar */
+    padding-right: 5px; /* 预留滚动条空间 */
     border-top: 1px solid #333;
     font-size: 11px;
-    /* REMOVED max-height and overflow to show all items directly */
-    max-height: none; 
-    overflow-y: visible;
+    max-height: 260px;
+    overflow-y: auto; /* 纵向滚动确保上下页可见 */
+    overflow-x: hidden; /* 禁止横向滚动条 */
+    width: 100%;
+    box-sizing: border-box;
 }
 .mini-watchlist::-webkit-scrollbar { width: 4px; }
 .mini-watchlist::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
 
 .mini-wl-row {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(80px, 1fr) minmax(60px, auto) minmax(100px, auto) minmax(65px, auto);
     align-items: center;
     padding: 3px 0;
     color: #aaa;
-    margin-right: 2px;
+    column-gap: 6px;
+    width: 100%;
+    box-sizing: border-box;
 }
-.mini-wl-symbol { font-weight: bold; color: #ddd; width: 60px; flex-shrink: 0; white-space: nowrap; overflow: visible; }
-.mini-wl-price { text-align: right; width: 50px; margin-right: 4px; color: #eee; font-family: monospace; }
-.mini-wl-action { text-align: center; width: 70px; font-size: 9px; flex-shrink: 0; margin-right: 4px; }
-.mini-wl-change { text-align: right; width: 50px; flex-shrink: 0; font-family: monospace; }
+.mini-wl-symbol { font-weight: bold; color: #ddd; white-space: nowrap; overflow: visible; }
+.mini-wl-price  { text-align: right; color: #eee; font-family: monospace; }
+.mini-wl-action { text-align: center; font-size: 9px; }
+.mini-wl-change { text-align: right; font-family: monospace; }
 
 /* Settings Styles (Adapted) */
 .setting-item {
@@ -614,7 +623,9 @@
     position: fixed;
     top: 100px;
     right: 290px; /* 主面板右侧 */
-    width: 200px;
+    width: auto;            /* 自适应内容宽度 */
+    min-width: 320px;       /* 保证四列能显示 */
+    max-width: 460px;       /* 防止过宽 */
     background-color: #121212;
     color: #e0e0e0;
     border: 1px solid #333;
@@ -627,6 +638,7 @@
     border-radius: 4px;
     max-height: 80vh;
     overflow-y: auto;
+    overflow-x: hidden;     /* 禁止横向滚动条 */
     transition: width 0.3s ease;
 }
 

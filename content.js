@@ -635,6 +635,9 @@ class TradingAssistant {
         
         // Side Watchlist Toggle
         document.getElementById("toggle-side-wl").onclick = () => this.toggleSideWatchlist();
+
+        // Side Watchlist Drag
+        this.initSideWatchlistDrag();
         
         // Draggable Logic
         this.initDrag();
@@ -694,6 +697,41 @@ class TradingAssistant {
         window.addEventListener("resize", () => {
              this.ensurePanelInView();
              this.positionAiPopup();
+        });
+    }
+
+    initSideWatchlistDrag() {
+        const panel = document.getElementById("side-watchlist-panel");
+        const header = panel.querySelector(".side-wl-header");
+        if (!panel || !header) return;
+
+        let dragging = false;
+        let startX, startY, startLeft, startTop;
+
+        header.addEventListener("mousedown", (e) => {
+            dragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            const rect = panel.getBoundingClientRect();
+            startLeft = rect.left;
+            startTop = rect.top;
+            // 取消 right，改用 left/top 便于拖动
+            panel.style.right = "auto";
+            panel.style.left = `${startLeft}px`;
+            panel.style.top = `${startTop}px`;
+            e.preventDefault();
+        });
+
+        document.addEventListener("mousemove", (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            panel.style.left = `${startLeft + dx}px`;
+            panel.style.top = `${startTop + dy}px`;
+        });
+
+        document.addEventListener("mouseup", () => {
+            dragging = false;
         });
     }
 
@@ -759,10 +797,10 @@ class TradingAssistant {
         const wlContent = document.getElementById("mini-watchlist");
         if (wlContent.style.display === "none") {
             wlContent.style.display = "block";
-            panel.style.width = "200px";
+            panel.style.width = ""; // 使用 CSS 自适应宽度
         } else {
             wlContent.style.display = "none";
-            panel.style.width = "40px";
+            panel.style.width = "48px"; // 收起时缩到图标宽度
         }
     }
 
@@ -1749,18 +1787,20 @@ class TradingAssistant {
             // Determine best available price and session (respect marketState)
             let price = meta.regularMarketPrice;
             let session = "REG";
+            let state = "REG";
 
             if (meta.marketState) {
                 // marketState examples: PRE, REGULAR, POST, CLOSED
                 const ms = meta.marketState.toUpperCase();
-                if (ms.includes("PRE")) session = "PRE";
-                else if (ms.includes("POST")) session = "POST";
-                else if (ms.includes("REG")) session = "REG";
-                else if (ms.includes("CLOSED")) session = "CLOSED";
+                if (ms.includes("PRE")) { session = "PRE"; state = "PRE"; }
+                else if (ms.includes("POST")) { session = "POST"; state = "POST"; }
+                else if (ms.includes("REG")) { session = "REG"; state = "REG"; }
+                else if (ms.includes("CLOSED")) { session = "CLOSED"; state = "CLOSED"; }
+                else { state = ms || session; }
             }
 
-            if (meta.postMarketPrice) { price = meta.postMarketPrice; session = "POST"; }
-            else if (meta.preMarketPrice) { price = meta.preMarketPrice; session = "PRE"; }
+            if (meta.postMarketPrice) { price = meta.postMarketPrice; session = "POST"; state = "POST"; }
+            else if (meta.preMarketPrice) { price = meta.preMarketPrice; session = "PRE"; state = "PRE"; }
 
             if (price == null) {
                 const quotes = data.chart.result[0].indicators?.quote?.[0]?.close || [];
@@ -1781,8 +1821,8 @@ class TradingAssistant {
             if (price != null) {
                 this.remoteQuoteCache[symbol] = {
                     price: parseFloat(price),
-                    session,
-                    marketState: meta.marketState || session,
+                    session: state,
+                    marketState: state,
                     dayHigh: parseFloat(dayHigh) || price,
                     dayLow: parseFloat(dayLow) || price,
                     previousClose: parseFloat(meta.previousClose) || price,
@@ -1812,13 +1852,14 @@ class TradingAssistant {
         
         // 优先使用 Yahoo API 返回的实时市场状态（如果有且新鲜）
         const info = symbol ? this.remoteQuoteCache[symbol] : null;
-        if (info && info.marketState && (now.getTime() - info.ts) < 30000) { // 30秒内的数据才信任
-            const ms = info.marketState.toUpperCase();
+        if (info && info.marketState && (now.getTime() - info.ts) < 120000) { // 2分钟内的数据才信任
+            const msRaw = info.marketState || info.session || "";
+            const ms = msRaw.toUpperCase();
             
-            // 完全信任 API 返回的状态
-            if (ms === "CLOSED") return "CLOSED";
+            // 完全信任 API 返回的状态（优先 PRE/POST）
             if (ms === "PRE" || ms.includes("PREPRE") || ms.includes("PREMARKET")) return "PRE";
             if (ms === "POST" || ms.includes("POSTPOST") || ms.includes("AFTERHOURS")) return "POST";
+            if (ms === "CLOSED") return "CLOSED";
             if (ms === "REGULAR" || ms === "REG") {
                 // API 说 REGULAR，但如果时间不对就降级
                 if (isWeekend) return "CLOSED";
@@ -4451,10 +4492,10 @@ ${ctx.position ? `持有 ${ctx.position.shares} 股，成本 $${ctx.position.avg
                         <span class="mini-wl-symbol" title="${sym}&#10;大盘: ${spyChange >= 0 ? '+' : ''}${spyChange.toFixed(2)}% ${marketIcon}">${sym} <span style="font-size:10px;">${marketIcon}</span></span>
                         <span class="mini-wl-price">${price.toFixed(2)}</span>
                         <span class="mini-wl-action" 
-                            style="color:${actionColor}; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); box-shadow:0 0 6px ${actionColor}33; border-radius:5px; padding:0 6px; cursor:help; display:inline-flex; align-items:center; gap:6px;" 
+                            style="color:${actionColor}; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); box-shadow:0 0 6px ${actionColor}33; border-radius:5px; padding:0 4px; cursor:help; display:inline-flex; align-items:center; gap:4px;" 
                             title="${actionReason}">
                             <span style="font-weight:600;">${action}</span>
-                            <span style="font-size:9px; color:#cfd8dc; background:#1c1c1c; border:1px solid #3a3a3a; padding:0 4px; border-radius:3px; letter-spacing:0.5px;">${decisionSource}</span>
+                            <span style="font-size:9px; color:#cfd8dc; background:#1c1c1c; border:1px solid #3a3a3a; padding:0 3px; border-radius:3px; letter-spacing:0.3px;">${decisionSource}</span>
                         </span>
                         <span class="mini-wl-change ${colorClass}">${changeStr}</span>
                     </div>
